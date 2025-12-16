@@ -5,21 +5,25 @@ Provides endpoints for the main dashboard comparison views.
 """
 
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Competitor, MenuItem, Alert
+from models import Competitor, MenuItem, Alert, PriceHistory
 from schemas import (
     DashboardComparison,
     CompetitorPriceSummary,
     CategoryBreakdown,
     ItemComparison,
     CompetitorMenuItem,
+    PriceHistoryResponse,
+    ItemPriceHistory,
+    PricePoint,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -250,3 +254,89 @@ async def get_summary(db: DB) -> dict:
         "unread_alerts": alert_count,
         "market_average_price": float(market_avg) if market_avg else 0,
     }
+
+
+@router.get("/price-history", response_model=PriceHistoryResponse)
+async def get_price_history(
+    db: DB,
+    days: int = Query(default=30, ge=1, le=90, description="Number of days of history"),
+    competitor_id: Optional[str] = Query(default=None, description="Filter by competitor ID"),
+    item_ids: Optional[str] = Query(default=None, description="Comma-separated item IDs"),
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+    limit: int = Query(default=5, ge=1, le=20, description="Max items to return"),
+) -> PriceHistoryResponse:
+    """
+    Get price history for menu items to display in charts.
+
+    Returns price data points over time for visualization.
+    """
+    end_date = datetime.now(timezone.utc)
+    start_date = end_date - timedelta(days=days)
+
+    # Build the query for menu items
+    items_stmt = select(
+        MenuItem.id,
+        MenuItem.name,
+        Competitor.id.label("competitor_id"),
+        Competitor.name.label("competitor_name"),
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Competitor.scraping_enabled == True  # noqa: E712
+    )
+
+    # Apply filters
+    if competitor_id:
+        items_stmt = items_stmt.where(Competitor.id == competitor_id)
+
+    if item_ids:
+        item_id_list = [id.strip() for id in item_ids.split(",")]
+        items_stmt = items_stmt.where(MenuItem.id.in_(item_id_list))
+
+    if category:
+        items_stmt = items_stmt.where(MenuItem.category == category)
+
+    items_stmt = items_stmt.limit(limit)
+
+    items_result = await db.execute(items_stmt)
+    items_data = items_result.all()
+
+    # Get price history for each item
+    result_items = []
+    for item in items_data:
+        # Get price history records
+        history_stmt = select(
+            PriceHistory.price,
+            PriceHistory.recorded_at,
+        ).where(
+            PriceHistory.menu_item_id == item.id,
+            PriceHistory.recorded_at >= start_date,
+        ).order_by(PriceHistory.recorded_at)
+
+        history_result = await db.execute(history_stmt)
+        history_data = history_result.all()
+
+        # Convert to price points
+        price_points = [
+            PricePoint(
+                date=record.recorded_at.strftime("%Y-%m-%d"),
+                price=float(record.price),
+            )
+            for record in history_data
+        ]
+
+        if price_points:  # Only include items with history
+            result_items.append(
+                ItemPriceHistory(
+                    item_id=item.id,
+                    item_name=item.name,
+                    competitor_name=item.competitor_name,
+                    data=price_points,
+                )
+            )
+
+    return PriceHistoryResponse(
+        items=result_items,
+        start_date=start_date.strftime("%Y-%m-%d"),
+        end_date=end_date.strftime("%Y-%m-%d"),
+    )

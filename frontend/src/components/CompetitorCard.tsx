@@ -42,7 +42,7 @@ export default function CompetitorCard({ competitor }: CompetitorCardProps) {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/v1/scraping/trigger/${competitor.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/scraping/trigger/${competitor.id}`,
         { method: 'POST' }
       );
 
@@ -78,7 +78,7 @@ export default function CompetitorCard({ competitor }: CompetitorCardProps) {
           <div className="flex items-center gap-3">
             <Link
               href={`/competitors/${competitor.id}`}
-              className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+              className="text-lg font-semibold text-gray-900 hover:text-forkast-green-600 transition-colors"
             >
               {competitor.name}
             </Link>
@@ -118,7 +118,7 @@ export default function CompetitorCard({ competitor }: CompetitorCardProps) {
 
       <div className="mt-4 pt-4 border-t border-gray-100">
         <div className="flex items-center justify-between">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-forkast-green-50 text-forkast-green-700">
             {competitor.concept_type || 'Uncategorized'}
           </span>
           <div className="flex gap-2">
@@ -164,7 +164,7 @@ export default function CompetitorCard({ competitor }: CompetitorCardProps) {
           <button
             onClick={handleRefreshData}
             disabled={isRefreshing}
-            className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-white bg-forkast-green-500 rounded-lg hover:bg-forkast-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRefreshing ? (
               <>

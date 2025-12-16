@@ -21,7 +21,7 @@ interface Competitor {
 async function fetchCompetitors(): Promise<Competitor[] | null> {
   try {
     // Use the endpoint that includes item counts
-    const res = await fetch('http://127.0.0.1:8000/api/v1/competitors/with-stats/all', {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/competitors/with-stats/all`, {
       cache: 'no-store',
     });
 
@@ -46,7 +46,7 @@ export default async function CompetitorsPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <h2 className="text-lg font-semibold text-red-800">Backend Unavailable</h2>
           <p className="text-red-600 mt-2">
-            Unable to connect to the backend server. Please ensure it&apos;s running at http://127.0.0.1:8000
+            Unable to connect to the backend server. Please ensure it&apos;s running.
           </p>
         </div>
       </div>

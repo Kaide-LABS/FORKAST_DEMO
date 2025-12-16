@@ -246,3 +246,40 @@ async def get_scrape_status(
         "has_doordash_url": bool(competitor.doordash_url),
         "has_ubereats_url": bool(competitor.ubereats_url),
     }
+
+
+# =============================================================================
+# Scheduler Endpoints
+# =============================================================================
+
+@router.get("/scheduler/status")
+async def get_scheduler_status_endpoint() -> dict:
+    """
+    Get the current status of the automated scraping scheduler.
+
+    Returns information about:
+    - Whether the scheduler is running
+    - Next scheduled scrape time
+    - Last run results
+    - Statistics from the last run
+    """
+    from services.scheduler import get_scheduler_status
+    return get_scheduler_status()
+
+
+@router.post("/scheduler/trigger")
+async def trigger_scheduled_scrape() -> dict:
+    """
+    Manually trigger an immediate scrape of all active competitors.
+
+    This runs the same job that would run at 6am daily.
+    Useful for testing or when you need fresh data immediately.
+    """
+    from services.scheduler import trigger_manual_scrape
+    await trigger_manual_scrape()
+
+    from services.scheduler import get_scheduler_status
+    return {
+        "message": "Manual scrape triggered successfully",
+        "status": get_scheduler_status(),
+    }

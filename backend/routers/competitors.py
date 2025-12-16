@@ -18,6 +18,7 @@ from schemas import (
     CompetitorRead,
     CompetitorUpdate,
     MenuItemRead,
+    MenuItemSimple,
 )
 
 router = APIRouter(prefix="/competitors", tags=["competitors"])
@@ -170,18 +171,16 @@ async def delete_competitor(
     await db.commit()
 
 
-@router.get("/{competitor_id}/menu", response_model=list[MenuItemRead])
+@router.get("/{competitor_id}/menu", response_model=list[MenuItemSimple])
 async def get_competitor_menu(
     competitor_id: str,
     db: DB,
-    include_history: bool = False,
 ) -> list[MenuItem]:
     """
     Get all menu items for a competitor.
 
     Args:
         competitor_id: UUID of the competitor
-        include_history: If True, include price history for each item
     """
     # Verify competitor exists
     competitor = await db.get(Competitor, competitor_id)
@@ -192,10 +191,6 @@ async def get_competitor_menu(
         )
 
     stmt = select(MenuItem).where(MenuItem.competitor_id == competitor_id)
-
-    if include_history:
-        stmt = stmt.options(selectinload(MenuItem.price_history))
-
     stmt = stmt.order_by(MenuItem.category, MenuItem.menu_position)
 
     result = await db.execute(stmt)

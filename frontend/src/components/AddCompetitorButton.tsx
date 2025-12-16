@@ -10,7 +10,7 @@ export default function AddCompetitorButton() {
     <>
       <button
         onClick={() => setIsModalOpen(true)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+        className="inline-flex items-center gap-2 px-4 py-2.5 bg-forkast-green-500 text-white text-sm font-medium rounded-lg hover:bg-forkast-green-600 transition-colors shadow-sm"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

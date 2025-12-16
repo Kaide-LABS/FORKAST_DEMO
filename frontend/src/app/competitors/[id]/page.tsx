@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import RefreshDataButton from '@/components/RefreshDataButton';
+import PriceHistoryChart from '@/components/PriceHistoryChart';
+import MenuItemsTable from '@/components/MenuItemsTable';
 
 interface Competitor {
   id: string;
@@ -43,21 +45,16 @@ function formatPrice(price: string | number | null): string {
   return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`;
 }
 
-// Group menu items by category
-function groupByCategory(items: MenuItem[]): Record<string, MenuItem[]> {
-  return items.reduce((groups, item) => {
-    const category = item.category || 'Other';
-    if (!groups[category]) {
-      groups[category] = [];
-    }
-    groups[category].push(item);
-    return groups;
-  }, {} as Record<string, MenuItem[]>);
+// Get unique categories count
+function getCategoriesCount(items: MenuItem[]): number {
+  const cats = new Set<string>();
+  items.forEach((item) => cats.add(item.category || 'Other'));
+  return cats.size;
 }
 
 async function fetchCompetitor(id: string): Promise<Competitor | null> {
   try {
-    const res = await fetch(`http://127.0.0.1:8000/api/v1/competitors/${id}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/competitors/${id}`, {
       cache: 'no-store',
     });
 
@@ -78,7 +75,7 @@ async function fetchCompetitor(id: string): Promise<Competitor | null> {
 
 async function fetchMenuItems(id: string): Promise<MenuItem[]> {
   try {
-    const res = await fetch(`http://127.0.0.1:8000/api/v1/competitors/${id}/menu`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/competitors/${id}/menu`, {
       cache: 'no-store',
     });
 
@@ -107,8 +104,7 @@ export default async function CompetitorDetailsPage({
     notFound();
   }
 
-  const groupedItems = groupByCategory(menuItems);
-  const categories = Object.keys(groupedItems).sort();
+  const categoriesCount = getCategoriesCount(menuItems);
 
   return (
     <div className="space-y-8">
@@ -158,7 +154,7 @@ export default async function CompetitorDetailsPage({
                 {competitor.location}
               </span>
               {competitor.concept_type && (
-                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-forkast-green-50 text-forkast-green-700">
                   {competitor.concept_type}
                 </span>
               )}
@@ -199,7 +195,7 @@ export default async function CompetitorDetailsPage({
           </div>
           <div>
             <span className="text-gray-500">Categories: </span>
-            <span className="font-medium text-gray-900">{categories.length}</span>
+            <span className="font-medium text-gray-900">{categoriesCount}</span>
           </div>
           {menuItems.length > 0 && (
             <div>
@@ -219,72 +215,16 @@ export default async function CompetitorDetailsPage({
         </div>
       </div>
 
+      {/* Price History Chart */}
+      <PriceHistoryChart
+        competitorId={competitor.id}
+        title={`${competitor.name} - Price Trends (30 Days)`}
+        days={30}
+      />
+
       {/* Menu Items */}
       {menuItems.length > 0 ? (
-        <div className="space-y-6">
-          {categories.map((category) => (
-            <div key={category} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              {/* Category Header */}
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">{category}</h2>
-                <p className="text-sm text-gray-500">{groupedItems[category].length} items</p>
-              </div>
-
-              {/* Items Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="py-3 px-6 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Item
-                      </th>
-                      <th className="py-3 px-6 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                        Description
-                      </th>
-                      <th className="py-3 px-6 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        Price
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {groupedItems[category].map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-900">
-                              {item.name}
-                            </span>
-                            {!item.is_available && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
-                                Unavailable
-                              </span>
-                            )}
-                          </div>
-                          {/* Show description on mobile */}
-                          {item.description && (
-                            <p className="mt-1 text-xs text-gray-500 md:hidden line-clamp-2">
-                              {item.description}
-                            </p>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 hidden md:table-cell">
-                          <p className="text-sm text-gray-500 max-w-md truncate">
-                            {item.description || '-'}
-                          </p>
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <span className="text-sm font-medium text-gray-900">
-                            {formatPrice(item.current_price)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MenuItemsTable items={menuItems} competitorName={competitor.name} />
       ) : (
         /* Empty State */
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">

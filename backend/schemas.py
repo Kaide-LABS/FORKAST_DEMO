@@ -85,8 +85,8 @@ class MenuItemCreate(MenuItemBase):
     platform: str = Field(..., pattern="^(doordash|ubereats)$")
 
 
-class MenuItemRead(MenuItemBase):
-    """Schema for reading menu item data."""
+class MenuItemSimple(MenuItemBase):
+    """Schema for reading menu item data without price history."""
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -94,10 +94,14 @@ class MenuItemRead(MenuItemBase):
     platform: str
     created_at: datetime
     updated_at: datetime
+
+
+class MenuItemRead(MenuItemSimple):
+    """Schema for reading menu item data with optional price history."""
     price_history: Optional[list[PriceHistoryRead]] = None
 
 
-class MenuItemWithCompetitor(MenuItemRead):
+class MenuItemWithCompetitor(MenuItemSimple):
     """Menu item with competitor name for display."""
     competitor_name: Optional[str] = None
 
@@ -202,3 +206,28 @@ class AlertsResponse(BaseModel):
     alerts: list[AlertWithItem]
     unacknowledged_count: int
     total_count: int
+
+
+# =============================================================================
+# Price History Chart Schemas
+# =============================================================================
+
+class PricePoint(BaseModel):
+    """Single price point for chart."""
+    date: str
+    price: float
+
+
+class ItemPriceHistory(BaseModel):
+    """Price history for a single menu item."""
+    item_id: str
+    item_name: str
+    competitor_name: str
+    data: list[PricePoint]
+
+
+class PriceHistoryResponse(BaseModel):
+    """Response for price history chart endpoint."""
+    items: list[ItemPriceHistory]
+    start_date: str
+    end_date: str

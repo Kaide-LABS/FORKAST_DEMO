@@ -1,8 +1,12 @@
 // Dashboard Home Page - Server Component
 
-interface CategoryBreakdown {
+import PriceHistoryChart from '@/components/PriceHistoryChart';
+import CategoryBreakdown from '@/components/CategoryBreakdown';
+import ROICalculator from '@/components/ROICalculator';
+
+interface CategoryBreakdownData {
   category: string;
-  your_avg: number | string | null;
+  client_avg: number | string | null;
   market_avg: number | string | null;
   delta: number | string | null;
   items_compared: number;
@@ -12,31 +16,19 @@ interface DashboardComparison {
   market_average: number | string | null;
   total_competitors: number;
   recent_alerts_count: number;
-  category_breakdown: CategoryBreakdown[];
+  category_breakdown: CategoryBreakdownData[];
 }
 
-// Helper to safely format numbers (handles string/null values from API)
+// Helper to safely format price values
 function formatPrice(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return '0.00';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   return isNaN(num) ? '0.00' : num.toFixed(2);
 }
 
-function formatPercent(value: number | string | null | undefined): string {
-  if (value === null || value === undefined) return '0.0';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return isNaN(num) ? '0.0' : num.toFixed(1);
-}
-
-function toNumber(value: number | string | null | undefined): number {
-  if (value === null || value === undefined) return 0;
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return isNaN(num) ? 0 : num;
-}
-
 async function fetchDashboardData(): Promise<DashboardComparison | null> {
   try {
-    const res = await fetch('http://127.0.0.1:8000/api/v1/dashboard/comparison', {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/dashboard/comparison`, {
       cache: 'no-store',
     });
 
@@ -81,7 +73,7 @@ export default async function DashboardPage() {
         {/* Market Position Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-500">Market Position</p>
-          <p className="text-3xl font-bold text-blue-600 mt-1">
+          <p className="text-3xl font-bold text-forkast-green-600 mt-1">
             ${formatPrice(data.market_average)}
           </p>
           <p className="text-xs text-gray-400 mt-1">Market average price</p>
@@ -108,70 +100,27 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Category Breakdown Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Category Breakdown</h2>
-          <p className="text-sm text-gray-500 mt-1">Your pricing compared to market average by category</p>
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Price History Chart - Takes 2 columns */}
+        <div className="lg:col-span-2">
+          <PriceHistoryChart
+            title="Market Price Trends (30 Days)"
+            days={30}
+          />
         </div>
 
-        {data.category_breakdown && data.category_breakdown.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="py-3 px-6 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Category
-                  </th>
-                  <th className="py-3 px-6 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Your Avg
-                  </th>
-                  <th className="py-3 px-6 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Market Avg
-                  </th>
-                  <th className="py-3 px-6 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Delta
-                  </th>
-                  <th className="py-3 px-6 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Items
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {data.category_breakdown.map((cat) => {
-                  const deltaNum = toNumber(cat.delta);
-                  return (
-                    <tr key={cat.category}>
-                      <td className="py-4 px-6 text-sm font-medium text-gray-900">
-                        {cat.category}
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-600 text-right">
-                        ${formatPrice(cat.your_avg)}
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-600 text-right">
-                        ${formatPrice(cat.market_avg)}
-                      </td>
-                      <td className={`py-4 px-6 text-sm font-medium text-right ${
-                        deltaNum > 0 ? 'text-red-600' : deltaNum < 0 ? 'text-green-600' : 'text-gray-500'
-                      }`}>
-                        {deltaNum > 0 ? '+' : ''}{formatPercent(cat.delta)}%
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-500 text-right">
-                        {cat.items_compared}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="p-8 text-center">
-            <p className="text-gray-500">No category data available yet.</p>
-            <p className="text-sm text-gray-400 mt-1">Add competitors to start tracking market prices.</p>
-          </div>
-        )}
+        {/* ROI Calculator - Takes 1 column */}
+        <div className="lg:col-span-1">
+          <ROICalculator
+            marketAverage={typeof data.market_average === 'string' ? parseFloat(data.market_average) : data.market_average || 0}
+            competitorsCount={data.total_competitors}
+          />
+        </div>
       </div>
+
+      {/* Category Breakdown */}
+      <CategoryBreakdown categories={data.category_breakdown} />
     </div>
   );
 }

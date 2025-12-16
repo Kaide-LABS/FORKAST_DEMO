@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
 from routers import competitors_router, dashboard_router, alerts_router, scraping_router
+from services.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -12,8 +13,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
     # Startup: Initialize database
     await init_db()
+    # Start the scheduled scraping service
+    await start_scheduler()
     yield
-    # Shutdown: cleanup if needed
+    # Shutdown: Stop the scheduler
+    await stop_scheduler()
 
 
 app = FastAPI(

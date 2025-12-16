@@ -31,7 +31,7 @@ export default function Sidebar() {
                 className={`
                   flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
                   ${isActive
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-forkast-green-500 text-white'
                     : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }
                 `}
