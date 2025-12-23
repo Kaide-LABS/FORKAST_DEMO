@@ -129,7 +129,7 @@ async def trigger_scrape(
     """
     Trigger a menu scrape for a competitor.
 
-    If the real scraper fails or returns no results, falls back to mock data.
+    Tries Uber Eats first (most reliable), then DoorDash.
     """
     # Fetch competitor
     competitor = await db.get(Competitor, competitor_id)
@@ -140,13 +140,40 @@ async def trigger_scrape(
         )
 
     items_data = []
-    scrape_source = "mock"
+    scrape_source = None
 
-    # Try real scraping if URL is available
-    if competitor.doordash_url:
+    # Try Uber Eats first (more reliable, no login required)
+    if competitor.ubereats_url and not items_data:
+        try:
+            from scraper.ubereats_scraper import UberEatsScraper
+
+            print(f"Scraping Uber Eats for {competitor.name}...")
+            scraper = UberEatsScraper()
+            result = await scraper.scrape(competitor.ubereats_url)
+            await scraper.close()
+
+            if result.success and result.items:
+                items_data = [
+                    {
+                        "name": item.name,
+                        "category": item.category,
+                        "description": item.description,
+                        "price": item.price,
+                        "position": item.position,
+                    }
+                    for item in result.items
+                ]
+                scrape_source = "ubereats"
+                print(f"Successfully scraped {len(items_data)} items from Uber Eats")
+        except Exception as e:
+            print(f"Uber Eats scraper error for {competitor.name}: {e}")
+
+    # Try DoorDash as fallback
+    if competitor.doordash_url and not items_data:
         try:
             from scraper.doordash_scraper import DoorDashScraper
 
+            print(f"Scraping DoorDash for {competitor.name}...")
             scraper = DoorDashScraper()
             result = await scraper.scrape(competitor.doordash_url)
             await scraper.close()
@@ -163,14 +190,16 @@ async def trigger_scrape(
                     for item in result.items
                 ]
                 scrape_source = "doordash"
+                print(f"Successfully scraped {len(items_data)} items from DoorDash")
         except Exception as e:
-            print(f"Scraper error for {competitor.name}: {e}")
-            # Fall through to mock data
+            print(f"DoorDash scraper error for {competitor.name}: {e}")
 
-    # Fallback to mock data if scraping failed or returned nothing
+    # If no data scraped, return error
     if not items_data:
-        items_data = generate_mock_items(competitor.concept_type)
-        scrape_source = "mock"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not scrape menu for {competitor.name}. Please check the URLs are valid.",
+        )
 
     # Clear existing menu items for this competitor
     await db.execute(
@@ -182,7 +211,7 @@ async def trigger_scrape(
     for item_data in items_data:
         menu_item = MenuItem(
             competitor_id=competitor_id,
-            platform="doordash" if scrape_source == "doordash" else "mock",
+            platform=scrape_source,
             name=item_data["name"],
             category=item_data.get("category"),
             description=item_data.get("description"),
@@ -216,7 +245,7 @@ async def trigger_scrape(
         "competitor_name": competitor.name,
         "items_count": len(new_items),
         "source": scrape_source,
-        "message": f"Successfully loaded {len(new_items)} menu items from {scrape_source} data",
+        "message": f"Successfully scraped {len(new_items)} menu items from {scrape_source}",
     }
 
 

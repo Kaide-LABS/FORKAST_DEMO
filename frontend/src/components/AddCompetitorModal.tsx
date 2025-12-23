@@ -118,7 +118,7 @@ export default function AddCompetitorModal({ isOpen, onClose }: AddCompetitorMod
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="e.g., Burger Palace"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
             />
           </div>
 
@@ -134,7 +134,7 @@ export default function AddCompetitorModal({ isOpen, onClose }: AddCompetitorMod
               onChange={(e) => setLocation(e.target.value)}
               required
               placeholder="e.g., 123 Main St, Austin TX"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
             />
           </div>
 
@@ -147,7 +147,7 @@ export default function AddCompetitorModal({ isOpen, onClose }: AddCompetitorMod
               id="conceptType"
               value={conceptType}
               onChange={(e) => setConceptType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent bg-white"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent bg-white"
             >
               <option value="">Select a type...</option>
               <option value="Burger">Burger</option>
@@ -173,7 +173,7 @@ export default function AddCompetitorModal({ isOpen, onClose }: AddCompetitorMod
               value={doordashUrl}
               onChange={(e) => setDoordashUrl(e.target.value)}
               placeholder="https://www.doordash.com/store/..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
             />
           </div>
 
@@ -188,7 +188,7 @@ export default function AddCompetitorModal({ isOpen, onClose }: AddCompetitorMod
               value={ubereatsUrl}
               onChange={(e) => setUbereatsUrl(e.target.value)}
               placeholder="https://www.ubereats.com/store/..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
             />
           </div>
 

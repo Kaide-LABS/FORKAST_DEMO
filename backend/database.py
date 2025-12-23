@@ -1,11 +1,19 @@
+import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = "sqlite+aiosqlite:///./competitive_intel.db"
+# Use PostgreSQL if DATABASE_URL is set, otherwise fall back to SQLite for local dev
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "sqlite+aiosqlite:///./competitive_intel.db"
+)
 
+# Cloud Run with Cloud SQL uses Unix socket connection
+# Format: postgresql+asyncpg://user:password@/database?host=/cloudsql/PROJECT:REGION:INSTANCE
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,
+    echo=False,  # Set to True for SQL debugging
+    pool_pre_ping=True,  # Verify connections before using
 )
 
 async_session = async_sessionmaker(

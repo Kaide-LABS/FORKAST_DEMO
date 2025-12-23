@@ -31,13 +31,13 @@ class Competitor(Base):
     ubereats_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     scraping_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_scraped_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime, nullable=True
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now
+        DateTime(timezone=True), default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
     menu_items: Mapped[list["MenuItem"]] = relationship(
@@ -67,10 +67,10 @@ class MenuItem(Base):
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     menu_position: Mapped[Optional[int]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now
+        DateTime(timezone=True), default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
     competitor: Mapped["Competitor"] = relationship(back_populates="menu_items")
@@ -93,7 +93,7 @@ class PriceHistory(Base):
     )
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now
+        DateTime(timezone=True), default=utc_now
     )
     change_percentage: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(10, 2), nullable=True
@@ -124,7 +124,7 @@ class Alert(Base):
     )
     is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utc_now
+        DateTime(timezone=True), default=utc_now
     )
 
     menu_item: Mapped["MenuItem"] = relationship()

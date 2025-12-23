@@ -4,7 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_API_URL = "https://forkast-api-249426017768.us-central1.run.app"
+  NEXT_PUBLIC_API_URL = "https://forkast-api-511464604796.us-central1.run.app"
 
 # Next.js on Netlify requires the Next.js Runtime
 [[plugins]]
