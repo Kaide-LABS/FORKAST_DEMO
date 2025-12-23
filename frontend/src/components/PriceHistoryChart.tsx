@@ -78,7 +78,7 @@ export default function PriceHistoryChart({
         }
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/dashboard/price-history?${params.toString()}`
+          `${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/dashboard/price-history?${params.toString()}`
         );
 
         if (!response.ok) {

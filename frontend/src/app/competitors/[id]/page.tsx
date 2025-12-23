@@ -54,7 +54,7 @@ function getCategoriesCount(items: MenuItem[]): number {
 
 async function fetchCompetitor(id: string): Promise<Competitor | null> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/competitors/${id}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/competitors/${id}`, {
       cache: 'no-store',
     });
 
@@ -75,7 +75,7 @@ async function fetchCompetitor(id: string): Promise<Competitor | null> {
 
 async function fetchMenuItems(id: string): Promise<MenuItem[]> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/competitors/${id}/menu`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/competitors/${id}/menu`, {
       cache: 'no-store',
     });
 

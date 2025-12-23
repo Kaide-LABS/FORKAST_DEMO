@@ -42,7 +42,7 @@ export default function CompetitorCard({ competitor }: CompetitorCardProps) {
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/scraping/trigger/${competitor.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/scraping/trigger/${competitor.id}`,
         { method: 'POST' }
       );
 

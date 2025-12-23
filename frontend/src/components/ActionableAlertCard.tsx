@@ -143,7 +143,7 @@ export default function ActionableAlertCard({ alert, onAcknowledge }: Actionable
   const handleAcknowledge = async () => {
     try {
       await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/alerts/${alert.id}/acknowledge`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/alerts/${alert.id}/acknowledge`,
         { method: 'POST' }
       );
       onAcknowledge?.(alert.id);
