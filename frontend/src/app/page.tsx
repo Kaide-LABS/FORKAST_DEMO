@@ -53,7 +53,7 @@ export default async function DashboardPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <h2 className="text-lg font-semibold text-red-800">Backend Unavailable</h2>
           <p className="text-red-600 mt-2">
-            Unable to connect to the backend server. Please ensure it&apos;s running at http://localhost:8000
+            Unable to connect to the backend server. Please try again later.
           </p>
         </div>
       </div>

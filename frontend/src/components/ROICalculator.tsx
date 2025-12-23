@@ -88,7 +88,7 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
               type="number"
               value={monthlyOrders}
               onChange={(e) => setMonthlyOrders(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
               placeholder="1000"
             />
           </div>
@@ -100,7 +100,7 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
               type="number"
               value={averageOrderValue}
               onChange={(e) => setAverageOrderValue(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
               placeholder="25"
             />
           </div>
@@ -112,7 +112,7 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
               type="number"
               value={currentMargin}
               onChange={(e) => setCurrentMargin(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-forkast-green-500 focus:border-transparent"
               placeholder="15"
             />
           </div>
