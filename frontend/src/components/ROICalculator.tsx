@@ -55,7 +55,6 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
   // API data
   const [roiData, setRoiData] = useState<ROIData | null>(null);
   const [hasOperatorProfile, setHasOperatorProfile] = useState(false);
-  const [loadingRoi, setLoadingRoi] = useState(false);
 
   // Calculated values (local calculation as fallback)
   const [potentialRevenue, setPotentialRevenue] = useState(0);
@@ -88,7 +87,6 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
   const fetchROIAnalysis = useCallback(async () => {
     if (!hasOperatorProfile) return;
 
-    setLoadingRoi(true);
     try {
       const params = new URLSearchParams({
         monthly_orders: monthlyOrders || '1000',
@@ -108,8 +106,6 @@ export default function ROICalculator({ marketAverage = 0, competitorsCount = 0 
       }
     } catch (err) {
       console.error('Error fetching ROI analysis:', err);
-    } finally {
-      setLoadingRoi(false);
     }
   }, [hasOperatorProfile, monthlyOrders, averageOrderValue, currentMargin, forkastCost]);
 
