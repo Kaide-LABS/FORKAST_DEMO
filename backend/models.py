@@ -131,3 +131,79 @@ class Alert(Base):
 
     def __repr__(self) -> str:
         return f"<Alert(id={self.id}, type={self.alert_type})>"
+
+
+class OperatorProfile(Base):
+    """
+    Operator profile represents the restaurant owner's own business.
+    This allows comparison between the operator's prices and competitors.
+    """
+    __tablename__ = "operator_profile"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    restaurant_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    concept_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ubereats_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    doordash_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Business metrics for ROI calculation
+    monthly_orders: Mapped[Optional[int]] = mapped_column(nullable=True)
+    average_order_value: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    profit_margin: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(5, 2), nullable=True  # Stored as percentage, e.g., 15.00 = 15%
+    )
+
+    last_scraped_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    # Relationship to operator's menu items
+    menu_items: Mapped[list["OperatorMenuItem"]] = relationship(
+        back_populates="operator", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<OperatorProfile(id={self.id}, name={self.restaurant_name})>"
+
+
+class OperatorMenuItem(Base):
+    """Menu items belonging to the operator's own restaurant."""
+    __tablename__ = "operator_menu_items"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    operator_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("operator_profile.id", ondelete="CASCADE"), nullable=False
+    )
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    current_price: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False
+    )
+    is_available: Mapped[bool] = mapped_column(Boolean, default=True)
+    menu_position: Mapped[Optional[int]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    operator: Mapped["OperatorProfile"] = relationship(back_populates="menu_items")
+
+    def __repr__(self) -> str:
+        return f"<OperatorMenuItem(id={self.id}, name={self.name}, price={self.current_price})>"

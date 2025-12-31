@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
-from routers import competitors_router, dashboard_router, alerts_router, scraping_router
+from routers import competitors_router, dashboard_router, alerts_router, scraping_router, operator_router
 from services.scheduler import start_scheduler, stop_scheduler
 
 
@@ -48,6 +48,7 @@ app.include_router(competitors_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(alerts_router, prefix="/api/v1")
 app.include_router(scraping_router, prefix="/api/v1")
+app.include_router(operator_router, prefix="/api/v1")
 
 
 @app.get("/api/health")
@@ -72,5 +73,6 @@ async def root():
             "dashboard": "/api/v1/dashboard",
             "alerts": "/api/v1/alerts",
             "scraping": "/api/v1/scraping",
+            "operator": "/api/v1/operator",
         }
     }

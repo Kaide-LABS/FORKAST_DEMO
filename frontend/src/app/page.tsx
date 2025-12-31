@@ -3,6 +3,7 @@
 import PriceHistoryChart from '@/components/PriceHistoryChart';
 import CategoryBreakdown from '@/components/CategoryBreakdown';
 import ROICalculator from '@/components/ROICalculator';
+import { SERVER_API_URL } from '@/lib/config';
 
 interface CategoryBreakdownData {
   category: string;
@@ -12,11 +13,24 @@ interface CategoryBreakdownData {
   items_compared: number;
 }
 
+interface OperatorComparison {
+  operator_name: string;
+  operator_avg_price: number | string;
+  market_avg_price: number | string;
+  price_difference: number | string;
+  percentage_difference: number | string;
+  underpriced_items: number;
+  overpriced_items: number;
+  competitive_items: number;
+  total_items: number;
+}
+
 interface DashboardComparison {
   market_average: number | string | null;
   total_competitors: number;
   recent_alerts_count: number;
   category_breakdown: CategoryBreakdownData[];
+  operator_comparison: OperatorComparison | null;
 }
 
 // Helper to safely format price values
@@ -28,7 +42,7 @@ function formatPrice(value: number | string | null | undefined): string {
 
 async function fetchDashboardData(): Promise<DashboardComparison | null> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/dashboard/comparison`, {
+    const res = await fetch(`${SERVER_API_URL}/api/v1/dashboard/comparison`, {
       cache: 'no-store',
     });
 
@@ -67,6 +81,45 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 mt-1">Monitor your competitive positioning in real-time</p>
       </div>
+
+      {/* Operator Comparison Banner (if profile exists) */}
+      {data.operator_comparison && (
+        <div className="bg-gradient-to-r from-forkast-green-500 to-emerald-500 rounded-xl shadow-sm p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">{data.operator_comparison.operator_name}</h2>
+              <p className="text-sm text-white/80">Your price position vs the market</p>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-bold">
+                ${formatPrice(data.operator_comparison.operator_avg_price)}
+              </p>
+              <p className={`text-sm ${parseFloat(data.operator_comparison.percentage_difference as string) < 0 ? 'text-amber-200' : 'text-white/80'}`}>
+                {parseFloat(data.operator_comparison.percentage_difference as string) > 0 ? '+' : ''}
+                {parseFloat(data.operator_comparison.percentage_difference as string).toFixed(1)}% vs market
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-4 gap-4">
+            <div className="bg-white/10 rounded-lg p-3">
+              <p className="text-xs text-white/70">Your Items</p>
+              <p className="text-xl font-bold">{data.operator_comparison.total_items}</p>
+            </div>
+            <div className="bg-amber-500/30 rounded-lg p-3">
+              <p className="text-xs text-white/70">Underpriced</p>
+              <p className="text-xl font-bold">{data.operator_comparison.underpriced_items}</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <p className="text-xs text-white/70">Competitive</p>
+              <p className="text-xl font-bold">{data.operator_comparison.competitive_items}</p>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <p className="text-xs text-white/70">Overpriced</p>
+              <p className="text-xl font-bold">{data.operator_comparison.overpriced_items}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

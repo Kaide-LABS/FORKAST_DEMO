@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Competitor, MenuItem, Alert, PriceHistory
+from models import Competitor, MenuItem, Alert, PriceHistory, OperatorProfile, OperatorMenuItem
 from schemas import (
     DashboardComparison,
     CompetitorPriceSummary,
@@ -24,6 +24,7 @@ from schemas import (
     PriceHistoryResponse,
     ItemPriceHistory,
     PricePoint,
+    OperatorComparison,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -128,6 +129,83 @@ async def get_comparison(db: DB) -> DashboardComparison:
     alerts_result = await db.execute(alerts_stmt)
     alerts_count = alerts_result.scalar() or 0
 
+    # Get operator comparison if profile exists
+    operator_comparison = None
+    op_profile_stmt = select(OperatorProfile).limit(1)
+    op_profile_result = await db.execute(op_profile_stmt)
+    op_profile = op_profile_result.scalar_one_or_none()
+
+    if op_profile:
+        # Get operator's menu items and calculate average
+        op_items_stmt = select(
+            func.count(OperatorMenuItem.id).label("item_count"),
+            func.avg(OperatorMenuItem.current_price).label("avg_price"),
+        ).where(OperatorMenuItem.operator_id == op_profile.id)
+
+        op_items_result = await db.execute(op_items_stmt)
+        op_stats = op_items_result.one_or_none()
+
+        if op_stats and op_stats.item_count > 0:
+            op_avg = Decimal(str(op_stats.avg_price)) if op_stats.avg_price else Decimal("0.00")
+
+            # Calculate price comparison stats
+            # Get all operator items for detailed comparison
+            op_all_items_stmt = select(OperatorMenuItem).where(
+                OperatorMenuItem.operator_id == op_profile.id
+            )
+            op_all_items_result = await db.execute(op_all_items_stmt)
+            op_items = op_all_items_result.scalars().all()
+
+            # Build competitor price map
+            comp_items_stmt = select(MenuItem.name, MenuItem.current_price).join(
+                Competitor, MenuItem.competitor_id == Competitor.id
+            ).where(Competitor.scraping_enabled == True)  # noqa: E712
+
+            comp_items_result = await db.execute(comp_items_stmt)
+            comp_items = comp_items_result.all()
+
+            from collections import defaultdict
+            comp_prices: dict[str, list] = defaultdict(list)
+            for name, price in comp_items:
+                comp_prices[name.lower()].append(price)
+
+            # Count underpriced, overpriced, competitive
+            underpriced = 0
+            overpriced = 0
+            competitive = 0
+            threshold = Decimal("10.0")  # 10% threshold
+
+            for op_item in op_items:
+                matching = comp_prices.get(op_item.name.lower(), [])
+                if not matching:
+                    continue
+
+                comp_avg = sum(matching) / len(matching)
+                pct_diff = ((op_item.current_price - comp_avg) / comp_avg * 100) if comp_avg > 0 else Decimal("0.00")
+
+                if pct_diff < -threshold:
+                    underpriced += 1
+                elif pct_diff > threshold:
+                    overpriced += 1
+                else:
+                    competitive += 1
+
+            # Calculate overall difference
+            price_diff = op_avg - market_average
+            pct_diff = ((price_diff / market_average) * 100) if market_average > 0 else Decimal("0.00")
+
+            operator_comparison = OperatorComparison(
+                operator_name=op_profile.restaurant_name,
+                operator_avg_price=round(op_avg, 2),
+                market_avg_price=round(market_average, 2),
+                price_difference=round(price_diff, 2),
+                percentage_difference=round(pct_diff, 2),
+                underpriced_items=underpriced,
+                overpriced_items=overpriced,
+                competitive_items=competitive,
+                total_items=op_stats.item_count,
+            )
+
     return DashboardComparison(
         market_average=Decimal(str(market_average)),
         total_items_tracked=total_items,
@@ -135,6 +213,7 @@ async def get_comparison(db: DB) -> DashboardComparison:
         competitors=competitor_summaries,
         category_breakdown=category_breakdowns,
         recent_alerts_count=alerts_count,
+        operator_comparison=operator_comparison,
     )
 
 
@@ -207,13 +286,24 @@ async def get_item_comparisons(
 
 
 @router.get("/categories")
-async def get_categories(db: DB) -> list[str]:
+async def get_categories(
+    db: DB,
+    competitor_id: Optional[str] = Query(default=None, description="Filter by competitor ID"),
+) -> list[str]:
     """
     Get list of all unique categories.
+
+    Args:
+        competitor_id: Optional filter to get categories for a specific competitor
     """
     stmt = select(MenuItem.category).distinct().where(
         MenuItem.category.isnot(None)
-    ).order_by(MenuItem.category)
+    )
+
+    if competitor_id:
+        stmt = stmt.where(MenuItem.competitor_id == competitor_id)
+
+    stmt = stmt.order_by(MenuItem.category)
 
     result = await db.execute(stmt)
     return [r[0] for r in result.all() if r[0]]
@@ -263,43 +353,73 @@ async def get_price_history(
     competitor_id: Optional[str] = Query(default=None, description="Filter by competitor ID"),
     item_ids: Optional[str] = Query(default=None, description="Comma-separated item IDs"),
     category: Optional[str] = Query(default=None, description="Filter by category"),
-    limit: int = Query(default=5, ge=1, le=20, description="Max items to return"),
+    limit: int = Query(default=5, ge=1, le=20, description="Max items to return (used when competitor_id is set)"),
+    limit_per_competitor: Optional[int] = Query(default=None, ge=1, le=100, description="Max items per competitor (for all competitors view)"),
 ) -> PriceHistoryResponse:
     """
     Get price history for menu items to display in charts.
 
     Returns price data points over time for visualization.
+
+    Args:
+        limit: Used when viewing a specific competitor
+        limit_per_competitor: Used when viewing all competitors - returns N items per competitor
     """
     end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days)
 
-    # Build the query for menu items
-    items_stmt = select(
-        MenuItem.id,
-        MenuItem.name,
-        Competitor.id.label("competitor_id"),
-        Competitor.name.label("competitor_name"),
-    ).join(
-        Competitor, MenuItem.competitor_id == Competitor.id
-    ).where(
-        Competitor.scraping_enabled == True  # noqa: E712
-    )
+    items_data = []
 
-    # Apply filters
-    if competitor_id:
-        items_stmt = items_stmt.where(Competitor.id == competitor_id)
+    # If limit_per_competitor is specified, get items for each competitor separately
+    if limit_per_competitor is not None and not competitor_id:
+        # Get all active competitors
+        comp_stmt = select(Competitor.id).where(Competitor.scraping_enabled == True)  # noqa: E712
+        comp_result = await db.execute(comp_stmt)
+        competitor_ids = [c.id for c in comp_result.all()]
 
-    if item_ids:
-        item_id_list = [id.strip() for id in item_ids.split(",")]
-        items_stmt = items_stmt.where(MenuItem.id.in_(item_id_list))
+        # For each competitor, get up to limit_per_competitor items
+        for comp_id in competitor_ids:
+            items_stmt = select(
+                MenuItem.id,
+                MenuItem.name,
+                Competitor.id.label("competitor_id"),
+                Competitor.name.label("competitor_name"),
+            ).join(
+                Competitor, MenuItem.competitor_id == Competitor.id
+            ).where(
+                Competitor.id == comp_id
+            ).limit(limit_per_competitor)
 
-    if category:
-        items_stmt = items_stmt.where(MenuItem.category == category)
+            result = await db.execute(items_stmt)
+            items_data.extend(result.all())
+    else:
+        # Standard query with single limit
+        items_stmt = select(
+            MenuItem.id,
+            MenuItem.name,
+            Competitor.id.label("competitor_id"),
+            Competitor.name.label("competitor_name"),
+        ).join(
+            Competitor, MenuItem.competitor_id == Competitor.id
+        ).where(
+            Competitor.scraping_enabled == True  # noqa: E712
+        )
 
-    items_stmt = items_stmt.limit(limit)
+        # Apply filters
+        if competitor_id:
+            items_stmt = items_stmt.where(Competitor.id == competitor_id)
 
-    items_result = await db.execute(items_stmt)
-    items_data = items_result.all()
+        if item_ids:
+            item_id_list = [id.strip() for id in item_ids.split(",")]
+            items_stmt = items_stmt.where(MenuItem.id.in_(item_id_list))
+
+        if category:
+            items_stmt = items_stmt.where(MenuItem.category == category)
+
+        items_stmt = items_stmt.limit(limit)
+
+        items_result = await db.execute(items_stmt)
+        items_data = items_result.all()
 
     # Get price history for each item
     result_items = []
@@ -330,6 +450,7 @@ async def get_price_history(
                 ItemPriceHistory(
                     item_id=item.id,
                     item_name=item.name,
+                    competitor_id=item.competitor_id,
                     competitor_name=item.competitor_name,
                     data=price_points,
                 )

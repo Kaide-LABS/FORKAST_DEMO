@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
 
+import json
+
 from bs4 import BeautifulSoup
 from playwright.async_api import Page
 
@@ -162,31 +164,128 @@ class UberEatsScraper:
         """
         Parse menu items from Uber Eats HTML.
 
-        Uber Eats structure:
-        - Menu items have data-testid="store-item-{uuid}"
-        - Item name is in image alt attribute or h3
-        - Price is in text with £ or $ symbol
-        - Categories are in data-testid="catalog-section-title"
+        First tries JSON-LD structured data (most reliable),
+        then falls back to HTML parsing.
         """
         soup = BeautifulSoup(html, "html.parser")
+
+        # Try JSON-LD extraction first (most reliable for categories)
+        items = self._extract_from_json_ld(soup)
+        if items:
+            print(f"Extracted {len(items)} items from JSON-LD data")
+            return items
+
+        # Fall back to HTML parsing
+        print("JSON-LD not found, falling back to HTML parsing")
+        return self._parse_menu_from_html(soup)
+
+    def _extract_from_json_ld(self, soup: BeautifulSoup) -> list[ScrapedMenuItem]:
+        """
+        Extract menu items from JSON-LD structured data (schema.org format).
+
+        This captures the actual category names from the restaurant's menu.
+        """
         items = []
         position = 0
+
+        for script in soup.find_all('script', type='application/ld+json'):
+            try:
+                data = json.loads(script.string)
+                if not isinstance(data, dict):
+                    continue
+
+                # Look for hasMenu -> hasMenuSection structure
+                menu = data.get('hasMenu')
+                if not menu or 'hasMenuSection' not in menu:
+                    continue
+
+                for section in menu['hasMenuSection']:
+                    category = section.get('name', 'Uncategorized')
+                    menu_items = section.get('hasMenuItem', [])
+
+                    for menu_item in menu_items:
+                        name = menu_item.get('name')
+                        if not name:
+                            continue
+
+                        # Extract price from offers
+                        price = Decimal("0.00")
+                        offers = menu_item.get('offers', {})
+                        if isinstance(offers, dict):
+                            price_str = offers.get('price', '0')
+                            try:
+                                price = Decimal(str(price_str))
+                            except:
+                                pass
+
+                        description = menu_item.get('description')
+
+                        items.append(ScrapedMenuItem(
+                            name=name,
+                            price=price,
+                            category=category,
+                            description=description,
+                            position=position,
+                        ))
+                        position += 1
+
+                if items:
+                    return items
+
+            except json.JSONDecodeError:
+                continue
+            except Exception as e:
+                print(f"Error parsing JSON-LD: {e}")
+                continue
+
+        return items
+
+    def _parse_menu_from_html(self, soup: BeautifulSoup) -> list[ScrapedMenuItem]:
+        """
+        Fallback HTML parsing for menu items.
+        """
+        items = []
+        position = 0
+        seen_names = set()
 
         # Detect currency (£ for UK, $ for US)
         price_pattern = re.compile(r'[£$](\d+(?:\.\d{2})?)')
 
-        # Find all store-item elements
-        store_items = soup.find_all(attrs={'data-testid': re.compile(r'^store-item-')})
+        # Find all catalog sections
+        catalog_sections = soup.find_all(attrs={'data-testid': 'store-catalog-section-vertical-grid'})
 
-        seen_names = set()
+        for section in catalog_sections:
+            category = None
+            parent = section.parent
+            for _ in range(5):
+                if parent is None:
+                    break
+                title_elem = parent.find(attrs={'data-testid': 'catalog-section-title'})
+                if title_elem:
+                    category = title_elem.get_text(strip=True)
+                    break
+                parent = parent.parent
 
-        for element in store_items:
-            item = self._extract_item_from_element(element, position, price_pattern)
-            if item and item.name not in seen_names:
-                if not self._is_ui_element(item.name):
-                    items.append(item)
-                    seen_names.add(item.name)
-                    position += 1
+            store_items = section.find_all(attrs={'data-testid': re.compile(r'^store-item-')})
+
+            for element in store_items:
+                item = self._extract_item_from_element(element, position, price_pattern, category)
+                if item and item.name not in seen_names:
+                    if not self._is_ui_element(item.name):
+                        items.append(item)
+                        seen_names.add(item.name)
+                        position += 1
+
+        # If no sections found, find all store items directly
+        if not items:
+            store_items = soup.find_all(attrs={'data-testid': re.compile(r'^store-item-')})
+            for element in store_items:
+                item = self._extract_item_from_element(element, position, price_pattern, None)
+                if item and item.name not in seen_names:
+                    if not self._is_ui_element(item.name):
+                        items.append(item)
+                        seen_names.add(item.name)
+                        position += 1
 
         return items
 
@@ -208,7 +307,7 @@ class UberEatsScraper:
 
         return False
 
-    def _extract_item_from_element(self, element, position: int, price_pattern) -> Optional[ScrapedMenuItem]:
+    def _extract_item_from_element(self, element, position: int, price_pattern, category: Optional[str] = None) -> Optional[ScrapedMenuItem]:
         """Extract menu item data from a BeautifulSoup element."""
         try:
             name = None
@@ -252,6 +351,7 @@ class UberEatsScraper:
             return ScrapedMenuItem(
                 name=name,
                 price=price,
+                category=category,
                 description=description,
                 position=position,
             )

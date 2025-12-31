@@ -3,6 +3,7 @@
 import CompetitorsHeader from '@/components/CompetitorsHeader';
 import AddCompetitorButton from '@/components/AddCompetitorButton';
 import CompetitorCard from '@/components/CompetitorCard';
+import { SERVER_API_URL } from '@/lib/config';
 
 interface Competitor {
   id: string;
@@ -21,7 +22,7 @@ interface Competitor {
 async function fetchCompetitors(): Promise<Competitor[] | null> {
   try {
     // Use the endpoint that includes item counts
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/competitors/with-stats/all`, {
+    const res = await fetch(`${SERVER_API_URL}/api/v1/competitors/with-stats/all`, {
       cache: 'no-store',
     });
 

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { API_BASE_URL } from '@/lib/config';
 
 interface RefreshDataButtonProps {
   competitorId: string;
@@ -24,7 +25,7 @@ export default function RefreshDataButton({
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/scraping/trigger/${competitorId}`,
+        `${API_BASE_URL}/api/v1/scraping/trigger/${competitorId}`,
         { method: 'POST' }
       );
 

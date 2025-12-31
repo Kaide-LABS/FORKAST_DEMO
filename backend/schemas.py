@@ -158,6 +158,19 @@ class CompetitorPriceSummary(BaseModel):
     item_count: int
 
 
+class OperatorComparison(BaseModel):
+    """Operator vs market comparison summary."""
+    operator_name: str
+    operator_avg_price: Decimal
+    market_avg_price: Decimal
+    price_difference: Decimal
+    percentage_difference: Decimal
+    underpriced_items: int
+    overpriced_items: int
+    competitive_items: int
+    total_items: int
+
+
 class DashboardComparison(BaseModel):
     """Main dashboard comparison view."""
     market_average: Decimal
@@ -166,6 +179,7 @@ class DashboardComparison(BaseModel):
     competitors: list[CompetitorPriceSummary]
     category_breakdown: list[CategoryBreakdown]
     recent_alerts_count: int
+    operator_comparison: Optional[OperatorComparison] = None
 
 
 class CompetitorMenuItem(BaseModel):
@@ -222,6 +236,7 @@ class ItemPriceHistory(BaseModel):
     """Price history for a single menu item."""
     item_id: str
     item_name: str
+    competitor_id: str
     competitor_name: str
     data: list[PricePoint]
 
@@ -231,3 +246,124 @@ class PriceHistoryResponse(BaseModel):
     items: list[ItemPriceHistory]
     start_date: str
     end_date: str
+
+
+# =============================================================================
+# Operator Profile Schemas
+# =============================================================================
+
+class OperatorProfileBase(BaseModel):
+    """Base schema for operator profile."""
+    restaurant_name: str = Field(..., min_length=1, max_length=255)
+    location: Optional[str] = Field(None, max_length=500)
+    concept_type: Optional[str] = Field(None, max_length=100)
+    ubereats_url: Optional[str] = Field(None, max_length=500)
+    doordash_url: Optional[str] = Field(None, max_length=500)
+    monthly_orders: Optional[int] = Field(None, ge=0)
+    average_order_value: Optional[Decimal] = Field(None, ge=0)
+    profit_margin: Optional[Decimal] = Field(None, ge=0, le=100)
+
+
+class OperatorProfileCreate(OperatorProfileBase):
+    """Schema for creating operator profile."""
+    pass
+
+
+class OperatorProfileUpdate(BaseModel):
+    """Schema for updating operator profile (all fields optional)."""
+    restaurant_name: Optional[str] = Field(None, min_length=1, max_length=255)
+    location: Optional[str] = Field(None, max_length=500)
+    concept_type: Optional[str] = Field(None, max_length=100)
+    ubereats_url: Optional[str] = Field(None, max_length=500)
+    doordash_url: Optional[str] = Field(None, max_length=500)
+    monthly_orders: Optional[int] = Field(None, ge=0)
+    average_order_value: Optional[Decimal] = Field(None, ge=0)
+    profit_margin: Optional[Decimal] = Field(None, ge=0, le=100)
+
+
+class OperatorProfileRead(OperatorProfileBase):
+    """Schema for reading operator profile."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    last_scraped_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OperatorMenuItemRead(BaseModel):
+    """Schema for reading operator menu item."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    platform: str
+    name: str
+    category: Optional[str] = None
+    description: Optional[str] = None
+    current_price: Decimal
+    is_available: bool
+    menu_position: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OperatorProfileWithItems(OperatorProfileRead):
+    """Operator profile with menu items."""
+    menu_items: list[OperatorMenuItemRead] = []
+
+
+# =============================================================================
+# Price Comparison Schemas (Operator vs Competitors)
+# =============================================================================
+
+class PriceGap(BaseModel):
+    """Represents a price gap between operator and competitors."""
+    operator_item_name: str
+    operator_price: Decimal
+    competitor_avg_price: Decimal
+    price_difference: Decimal
+    percentage_difference: Decimal
+    opportunity_type: str  # "underpriced", "overpriced", "competitive"
+    matching_competitors: int
+
+
+class PriceAnalysisResponse(BaseModel):
+    """Response for price analysis endpoint."""
+    operator_avg_price: Decimal
+    market_avg_price: Decimal
+    total_items_compared: int
+    underpriced_items: int
+    overpriced_items: int
+    competitive_items: int
+    potential_revenue_increase: Decimal
+    price_gaps: list[PriceGap]
+
+
+# =============================================================================
+# ROI Analysis Schemas
+# =============================================================================
+
+class ROIAnalysis(BaseModel):
+    """Enhanced ROI analysis with real data."""
+    # Business inputs
+    monthly_orders: int
+    average_order_value: Decimal
+    profit_margin: Decimal
+
+    # Calculated values
+    current_monthly_revenue: Decimal
+    potential_price_increase_pct: Decimal
+    additional_monthly_revenue: Decimal
+    additional_monthly_profit: Decimal
+    annual_impact: Decimal
+
+    # Forkast ROI
+    forkast_monthly_cost: Decimal = Decimal("99.00")
+    forkast_annual_cost: Decimal = Decimal("1188.00")
+    net_annual_roi: Decimal
+    roi_multiple: Decimal  # How many times the subscription cost is returned
+
+    # Price gap insights
+    underpriced_items_count: int
+    avg_underpricing_pct: Decimal
+    top_opportunities: list[PriceGap]

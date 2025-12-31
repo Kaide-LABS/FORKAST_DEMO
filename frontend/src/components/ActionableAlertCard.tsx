@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 
 interface Alert {
   id: string;
@@ -143,7 +144,7 @@ export default function ActionableAlertCard({ alert, onAcknowledge }: Actionable
   const handleAcknowledge = async () => {
     try {
       await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/alerts/${alert.id}/acknowledge`,
+        `${API_BASE_URL}/api/v1/alerts/${alert.id}/acknowledge`,
         { method: 'POST' }
       );
       onAcknowledge?.(alert.id);

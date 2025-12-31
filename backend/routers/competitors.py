@@ -119,7 +119,27 @@ async def create_competitor(
     """
     Create a new competitor to track.
     """
-    competitor = Competitor(**competitor_data.model_dump())
+    # Trim whitespace from name
+    clean_name = competitor_data.name.strip()
+
+    # Check for duplicate by name (case-insensitive, trimmed)
+    stmt = select(Competitor).where(
+        func.lower(func.trim(Competitor.name)) == func.lower(clean_name)
+    )
+    result = await db.execute(stmt)
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A competitor named '{existing.name.strip()}' already exists",
+        )
+
+    # Use the cleaned name
+    competitor_data_dict = competitor_data.model_dump()
+    competitor_data_dict['name'] = clean_name
+
+    competitor = Competitor(**competitor_data_dict)
     db.add(competitor)
     await db.commit()
     await db.refresh(competitor)

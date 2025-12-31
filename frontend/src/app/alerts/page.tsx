@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import AlertsList from '@/components/AlertsList';
+import { SERVER_API_URL } from '@/lib/config';
 
 interface Alert {
   id: string;
@@ -24,7 +25,7 @@ interface AlertsResponse {
 
 async function fetchAlerts(): Promise<AlertsResponse | null> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://forkast-api-511464604796.us-central1.run.app'}/api/v1/alerts`, {
+    const res = await fetch(`${SERVER_API_URL}/api/v1/alerts`, {
       cache: 'no-store',
     });
 
@@ -56,40 +57,40 @@ export default async function AlertsPage() {
     );
   }
 
-  const { alerts, unacknowledged_count, total_count } = data;
+  const { alerts } = data;
+
+  // Calculate stats from actual displayable alerts
+  const totalAlerts = alerts.length;
+  const unacknowledgedAlerts = alerts.filter(a => !a.is_acknowledged).length;
+  const reviewedAlerts = alerts.filter(a => a.is_acknowledged).length;
 
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Price Alerts</h1>
-          <p className="text-gray-500 mt-1">
-            AI-powered recommendations when competitors change prices
-          </p>
-        </div>
-        {unacknowledged_count > 0 && (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800">
-            {unacknowledged_count} unread
-          </span>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Price Alerts</h1>
+        <p className="text-gray-500 mt-1">
+          AI-powered recommendations when competitors change prices
+        </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Total Alerts</p>
-          <p className="text-2xl font-bold text-gray-900">{total_count}</p>
+      {/* Stats - Only show if there are alerts */}
+      {totalAlerts > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Total Alerts</p>
+            <p className="text-2xl font-bold text-gray-900">{totalAlerts}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Requires Review</p>
+            <p className="text-2xl font-bold text-amber-600">{unacknowledgedAlerts}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <p className="text-sm text-gray-500">Reviewed</p>
+            <p className="text-2xl font-bold text-forkast-green-600">{reviewedAlerts}</p>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Requires Review</p>
-          <p className="text-2xl font-bold text-amber-600">{unacknowledged_count}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Reviewed</p>
-          <p className="text-2xl font-bold text-forkast-green-600">{total_count - unacknowledged_count}</p>
-        </div>
-      </div>
+      )}
 
       {/* Alerts List with Actionable Cards */}
       {alerts.length > 0 ? (
