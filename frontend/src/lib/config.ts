@@ -21,4 +21,5 @@ export const API_ENDPOINTS = {
   alerts: `${CLIENT_API_URL}/api/v1/alerts`,
   scraping: `${CLIENT_API_URL}/api/v1/scraping`,
   operator: `${CLIENT_API_URL}/api/v1/operator`,
+  categories: `${CLIENT_API_URL}/api/v1/categories`,
 } as const;

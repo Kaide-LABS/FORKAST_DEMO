@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import RefreshDataButton from '@/components/RefreshDataButton';
 import PriceHistoryChart from '@/components/PriceHistoryChart';
 import MenuItemsTable from '@/components/MenuItemsTable';
+import CompetitorCategoryMapping from '@/components/CompetitorCategoryMapping';
 import { SERVER_API_URL } from '@/lib/config';
 
 interface Competitor {
@@ -225,7 +226,19 @@ export default async function CompetitorDetailsPage({
 
       {/* Menu Items */}
       {menuItems.length > 0 ? (
-        <MenuItemsTable items={menuItems} competitorName={competitor.name} />
+        <>
+          <MenuItemsTable items={menuItems} competitorName={competitor.name} />
+
+          {/* Category Mapping */}
+          <CompetitorCategoryMapping
+            competitorId={competitor.id}
+            categories={Array.from(new Set(
+              menuItems
+                .map(item => item.category)
+                .filter((cat): cat is string => cat !== null && cat !== undefined)
+            ))}
+          />
+        </>
       ) : (
         /* Empty State */
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">

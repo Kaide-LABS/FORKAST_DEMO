@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text, Boolean, DateTime, Numeric
+from sqlalchemy import ForeignKey, String, Text, Boolean, DateTime, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -207,3 +207,69 @@ class OperatorMenuItem(Base):
 
     def __repr__(self) -> str:
         return f"<OperatorMenuItem(id={self.id}, name={self.name}, price={self.current_price})>"
+
+
+class CanonicalCategory(Base):
+    """
+    Standard category definitions for semantic grouping.
+    Examples: Burgers, Chicken, Vegan & Plant-Based, Sides, Beverages, etc.
+    """
+    __tablename__ = "canonical_categories"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    keywords: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated keywords for matching
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+    # Relationship to mappings
+    mappings: Mapped[list["CategoryMapping"]] = relationship(
+        back_populates="canonical_category", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<CanonicalCategory(id={self.id}, name={self.name})>"
+
+
+class CategoryMapping(Base):
+    """
+    Maps raw category names from restaurants to canonical categories.
+    Supports per-restaurant mappings (different restaurants can map the same
+    raw category differently if needed).
+    """
+    __tablename__ = "category_mappings"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=generate_uuid
+    )
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "competitor" or "operator"
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)  # competitor_id or operator_id
+    raw_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    canonical_category_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("canonical_categories.id", ondelete="CASCADE"), nullable=False
+    )
+    confidence_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(5, 4), nullable=True  # AI confidence score (0.0000 to 1.0000)
+    )
+    is_manual: Mapped[bool] = mapped_column(Boolean, default=False)  # True if manually set by user
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    # Relationship to canonical category
+    canonical_category: Mapped["CanonicalCategory"] = relationship(back_populates="mappings")
+
+    # Unique constraint: one mapping per source + raw_category
+    __table_args__ = (
+        UniqueConstraint('source_type', 'source_id', 'raw_category', name='uq_category_mapping'),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CategoryMapping(id={self.id}, raw={self.raw_category}, canonical_id={self.canonical_category_id})>"

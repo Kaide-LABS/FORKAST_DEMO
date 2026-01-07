@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { API_ENDPOINTS } from '@/lib/config';
+import MenuItemsTable from '@/components/MenuItemsTable';
+import CategoryMappingManager from '@/components/CategoryMappingManager';
+import CategoryComparison from '@/components/CategoryComparison';
 
 interface OperatorProfile {
   id: string;
@@ -49,6 +52,49 @@ interface PriceAnalysis {
   price_gaps: PriceGap[];
 }
 
+// Menu Stats Component
+function MenuStats({ items }: { items: OperatorMenuItem[] }) {
+  const stats = useMemo(() => {
+    const categories = new Set<string>();
+    let totalPrice = 0;
+
+    items.forEach((item) => {
+      categories.add(item.category || 'Other');
+      const price = typeof item.current_price === 'string'
+        ? parseFloat(item.current_price)
+        : item.current_price;
+      if (!isNaN(price)) {
+        totalPrice += price;
+      }
+    });
+
+    return {
+      totalItems: items.length,
+      categoriesCount: categories.size,
+      avgPrice: items.length > 0 ? totalPrice / items.length : 0,
+    };
+  }, [items]);
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-4">
+      <div className="flex flex-wrap gap-6 text-sm">
+        <div>
+          <span className="text-gray-500">Total Items: </span>
+          <span className="font-medium text-gray-900">{stats.totalItems}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Categories: </span>
+          <span className="font-medium text-gray-900">{stats.categoriesCount}</span>
+        </div>
+        <div>
+          <span className="text-gray-500">Avg Price: </span>
+          <span className="font-medium text-gray-900">${stats.avgPrice.toFixed(2)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MyRestaurantPage() {
   const [profile, setProfile] = useState<OperatorProfile | null>(null);
   const [priceAnalysis, setPriceAnalysis] = useState<PriceAnalysis | null>(null);
@@ -57,6 +103,7 @@ export default function MyRestaurantPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' } | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -157,10 +204,23 @@ export default function MyRestaurantPage() {
     }
   };
 
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setToast({ show: true, message, type });
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  }, []);
+
   const handleScrape = async (platform: 'ubereats' | 'doordash') => {
     setScraping(true);
     setError(null);
     setSuccessMessage(null);
+
+    const platformName = platform === 'ubereats' ? 'Uber Eats' : 'DoorDash';
+
+    // Store the initial last_scraped_at to detect when it changes
+    const initialLastScraped = profile?.last_scraped_at || null;
 
     try {
       const res = await fetch(`${API_ENDPOINTS.operator}/scrape?platform=${platform}`, {
@@ -172,14 +232,44 @@ export default function MyRestaurantPage() {
         throw new Error(errorData.detail || 'Failed to start scraping');
       }
 
-      setSuccessMessage(`Scraping ${platform} menu in background. Refresh in a moment to see results.`);
+      setSuccessMessage(`Scraping ${platformName} menu...`);
 
       // Poll for completion
-      setTimeout(async () => {
-        await fetchProfile();
-        await fetchPriceAnalysis();
-        setScraping(false);
-      }, 10000);
+      let pollCount = 0;
+      const maxPolls = 30; // 30 polls * 2 seconds = 60 seconds max
+
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+
+        try {
+          const profileRes = await fetch(`${API_ENDPOINTS.operator}/profile`);
+          if (profileRes.ok) {
+            const data = await profileRes.json();
+
+            // Check if last_scraped_at has CHANGED from initial value
+            if (data?.last_scraped_at && data.last_scraped_at !== initialLastScraped) {
+              clearInterval(pollInterval);
+              setProfile(data);
+              await fetchPriceAnalysis();
+              setScraping(false);
+              setSuccessMessage(null);
+              showToast(`${platformName} menu scraped successfully! Found ${data.menu_items?.length || 0} items.`, 'success');
+              return;
+            }
+          }
+        } catch (pollErr) {
+          console.error('Polling error:', pollErr);
+        }
+
+        // Timeout check
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval);
+          setScraping(false);
+          setSuccessMessage(null);
+          showToast('Scraping is taking longer than expected. Please refresh the page.', 'error');
+        }
+      }, 2000);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scrape menu');
       setScraping(false);
@@ -210,6 +300,38 @@ export default function MyRestaurantPage() {
 
   return (
     <div className="space-y-8">
+      {/* Toast Notification */}
+      {toast?.show && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div
+            className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg border ${
+              toast.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <svg className="h-6 w-6 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+              </svg>
+            )}
+            <p className="font-medium">{toast.message}</p>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">My Restaurant</h1>
@@ -395,39 +517,57 @@ export default function MyRestaurantPage() {
             </div>
           )}
 
-          {/* Menu Items Preview */}
-          {profile?.menu_items && profile.menu_items.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Your Menu ({profile.menu_items.length} items)
-              </h2>
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {profile.menu_items.slice(0, 10).map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                      {item.category && (
-                        <p className="text-xs text-gray-500">{item.category}</p>
-                      )}
-                    </div>
-                    <span className="text-sm font-semibold text-forkast-green-600">
-                      {formatPrice(item.current_price)}
-                    </span>
-                  </div>
-                ))}
-                {profile.menu_items.length > 10 && (
-                  <p className="text-xs text-gray-500 text-center pt-2">
-                    + {profile.menu_items.length - 10} more items
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Full Menu Section */}
+      {profile?.menu_items && profile.menu_items.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Your Menu</h2>
+            <span className="text-sm text-gray-500">
+              Last scraped: {formatDate(profile.last_scraped_at)}
+            </span>
+          </div>
+
+          {/* Menu Stats */}
+          <MenuStats items={profile.menu_items} />
+
+          {/* Full Menu Table */}
+          <MenuItemsTable
+            items={profile.menu_items.map(item => ({
+              ...item,
+              description: null,
+              menu_position: null,
+            }))}
+            competitorName={profile.restaurant_name || 'My Restaurant'}
+          />
+        </div>
+      )}
+
+      {/* Category Mapping Section */}
+      {profile?.menu_items && profile.menu_items.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <CategoryMappingManager
+            sourceType="operator"
+            sourceId={profile.id}
+            rawCategories={Array.from(new Set(
+              profile.menu_items
+                .map(item => item.category)
+                .filter((cat): cat is string => cat !== null && cat !== undefined)
+            ))}
+            onMappingsChanged={() => {
+              // Optionally refresh price analysis when mappings change
+              fetchPriceAnalysis();
+            }}
+          />
+        </div>
+      )}
+
+      {/* Category Price Comparison */}
+      {profile?.menu_items && profile.menu_items.length > 0 && (
+        <CategoryComparison />
+      )}
 
       {/* Price Analysis Section */}
       {priceAnalysis && (

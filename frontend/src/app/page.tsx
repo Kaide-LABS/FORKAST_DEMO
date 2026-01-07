@@ -1,7 +1,8 @@
 // Dashboard Home Page - Server Component
 
 import PriceHistoryChart from '@/components/PriceHistoryChart';
-import CategoryBreakdown from '@/components/CategoryBreakdown';
+import CategoryComparison from '@/components/CategoryComparison';
+import AIInsights from '@/components/AIInsights';
 import ROICalculator from '@/components/ROICalculator';
 import { SERVER_API_URL } from '@/lib/config';
 
@@ -172,8 +173,11 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Category Breakdown */}
-      <CategoryBreakdown categories={data.category_breakdown} />
+      {/* AI Insights */}
+      <AIInsights />
+
+      {/* Category Price Comparison */}
+      <CategoryComparison />
     </div>
   );
 }

@@ -367,3 +367,96 @@ class ROIAnalysis(BaseModel):
     underpriced_items_count: int
     avg_underpricing_pct: Decimal
     top_opportunities: list[PriceGap]
+
+
+# =============================================================================
+# Category Mapping Schemas
+# =============================================================================
+
+class CanonicalCategoryBase(BaseModel):
+    """Base schema for canonical category."""
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    keywords: Optional[str] = None  # Comma-separated keywords
+
+
+class CanonicalCategoryCreate(CanonicalCategoryBase):
+    """Schema for creating a canonical category."""
+    pass
+
+
+class CanonicalCategoryRead(CanonicalCategoryBase):
+    """Schema for reading a canonical category."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+
+
+class CategoryMappingBase(BaseModel):
+    """Base schema for category mapping."""
+    source_type: str = Field(..., pattern="^(competitor|operator)$")
+    source_id: str
+    raw_category: str = Field(..., min_length=1, max_length=100)
+    canonical_category_id: str
+
+
+class CategoryMappingCreate(CategoryMappingBase):
+    """Schema for creating a category mapping."""
+    is_manual: bool = True  # Manual mappings by default
+
+
+class CategoryMappingUpdate(BaseModel):
+    """Schema for updating a category mapping."""
+    canonical_category_id: Optional[str] = None
+    is_manual: Optional[bool] = None
+
+
+class CategoryMappingRead(BaseModel):
+    """Schema for reading a category mapping."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_type: str
+    source_id: str
+    raw_category: str
+    canonical_category_id: str
+    canonical_category: Optional[CanonicalCategoryRead] = None
+    confidence_score: Optional[Decimal] = None
+    is_manual: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class CategorySuggestionAlt(BaseModel):
+    """Alternative suggestion for category mapping."""
+    id: str
+    name: str
+    score: float
+
+
+class CategorySuggestionRead(BaseModel):
+    """AI-generated suggestion for mapping a category."""
+    raw_category: str
+    canonical_category_id: str
+    canonical_category_name: str
+    confidence_score: float
+    alternatives: list[CategorySuggestionAlt]
+
+
+class CategoryComparisonItem(BaseModel):
+    """Single item in semantic category comparison."""
+    canonical_category_id: str
+    canonical_category_name: str
+    operator_avg: Optional[Decimal] = None
+    operator_items: int = 0
+    market_avg: Optional[Decimal] = None
+    market_items: int = 0
+    delta_pct: Optional[Decimal] = None
+
+
+class CategoryComparisonResponse(BaseModel):
+    """Response for semantic category comparison."""
+    comparisons: list[CategoryComparisonItem]
+    unmapped_operator_categories: list[str]
+    unmapped_competitor_categories: list[str]

@@ -55,7 +55,9 @@ export async function POST(
     pathStr += '/';
   }
 
-  const url = `${BACKEND_URL}/${pathStr}`;
+  // Include query parameters for POST requests
+  const searchParams = request.nextUrl.searchParams.toString();
+  const url = `${BACKEND_URL}/${pathStr}${searchParams ? `?${searchParams}` : ''}`;
 
   try {
     const body = await request.json().catch(() => null);
@@ -92,7 +94,9 @@ export async function PUT(
     pathStr += '/';
   }
 
-  const url = `${BACKEND_URL}/${pathStr}`;
+  // Include query parameters for PUT requests
+  const searchParams = request.nextUrl.searchParams.toString();
+  const url = `${BACKEND_URL}/${pathStr}${searchParams ? `?${searchParams}` : ''}`;
 
   try {
     const body = await request.json().catch(() => null);
