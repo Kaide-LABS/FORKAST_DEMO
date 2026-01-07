@@ -150,13 +150,14 @@ async def scrape_operator_menu(
     Trigger a scrape of the operator's menu from their delivery platform URL.
 
     Runs in the background and updates the operator's menu items.
+    Returns a job_id that can be used to check status.
     """
     stmt = select(OperatorProfile).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
     if not profile:
-        raise HTTPException(status_code=404, detail="Operator profile not found")
+        raise HTTPException(status_code=404, detail="Operator profile not found. Please create a profile first.")
 
     # Get the URL for the selected platform
     url = profile.ubereats_url if platform == "ubereats" else profile.doordash_url
@@ -164,21 +165,72 @@ async def scrape_operator_menu(
     if not url:
         raise HTTPException(
             status_code=400,
-            detail=f"No {platform} URL configured for operator profile",
+            detail=f"No {platform} URL configured. Please add your {platform} URL to your profile first.",
         )
 
     # Import here to avoid circular imports
     from services.operator_scraper import scrape_operator_menu_task
+    from services.scrape_status import scrape_tracker
+
+    # Create a job for tracking
+    job = await scrape_tracker.create_job(
+        source_type="operator",
+        source_id=profile.id,
+        platform=platform,
+        url=url,
+    )
 
     # Run scraping in background
-    background_tasks.add_task(scrape_operator_menu_task, profile.id, url, platform)
+    background_tasks.add_task(scrape_operator_menu_task, profile.id, url, platform, job.job_id)
 
     return {
         "status": "started",
         "message": f"Scraping {platform} menu in background",
         "platform": platform,
         "url": url,
+        "job_id": job.job_id,
     }
+
+
+@router.get("/scrape/status/{job_id}")
+async def get_scrape_status(job_id: str) -> dict:
+    """
+    Get the status of a scrape job.
+
+    Returns current state, items scraped, and any error messages.
+    """
+    from services.scrape_status import scrape_tracker
+
+    job = await scrape_tracker.get_job(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Scrape job not found")
+
+    return job.to_dict()
+
+
+@router.get("/scrape/latest")
+async def get_latest_scrape_status(db: DB) -> dict:
+    """
+    Get the status of the latest scrape job for the operator.
+
+    Useful for checking if a scrape is in progress or recently completed.
+    """
+    from services.scrape_status import scrape_tracker
+
+    stmt = select(OperatorProfile).limit(1)
+    result = await db.execute(stmt)
+    profile = result.scalar_one_or_none()
+
+    if not profile:
+        return {"status": "no_profile", "message": "No operator profile found"}
+
+    job = await scrape_tracker.get_latest_for_source("operator", profile.id)
+
+    if not job:
+        return {"status": "no_jobs", "message": "No scrape jobs found"}
+
+    return job.to_dict()
 
 
 @router.get("/menu", response_model=list[OperatorMenuItemRead])

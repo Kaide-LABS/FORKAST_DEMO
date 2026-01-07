@@ -219,9 +219,6 @@ export default function MyRestaurantPage() {
 
     const platformName = platform === 'ubereats' ? 'Uber Eats' : 'DoorDash';
 
-    // Store the initial last_scraped_at to detect when it changes
-    const initialLastScraped = profile?.last_scraped_at || null;
-
     try {
       const res = await fetch(`${API_ENDPOINTS.operator}/scrape?platform=${platform}`, {
         method: 'POST',
@@ -232,29 +229,48 @@ export default function MyRestaurantPage() {
         throw new Error(errorData.detail || 'Failed to start scraping');
       }
 
+      const { job_id } = await res.json();
       setSuccessMessage(`Scraping ${platformName} menu...`);
 
-      // Poll for completion
+      // Poll job status for completion
       let pollCount = 0;
-      const maxPolls = 30; // 30 polls * 2 seconds = 60 seconds max
+      const maxPolls = 90; // 90 polls * 2 seconds = 3 minutes max
 
       const pollInterval = setInterval(async () => {
         pollCount++;
 
         try {
-          const profileRes = await fetch(`${API_ENDPOINTS.operator}/profile`);
-          if (profileRes.ok) {
-            const data = await profileRes.json();
+          // Check job status
+          const statusRes = await fetch(`${API_ENDPOINTS.operator}/scrape/status/${job_id}`);
+          if (statusRes.ok) {
+            const status = await statusRes.json();
 
-            // Check if last_scraped_at has CHANGED from initial value
-            if (data?.last_scraped_at && data.last_scraped_at !== initialLastScraped) {
+            if (status.state === 'success') {
               clearInterval(pollInterval);
-              setProfile(data);
-              await fetchPriceAnalysis();
+              // Fetch updated profile
+              const profileRes = await fetch(`${API_ENDPOINTS.operator}/profile`);
+              if (profileRes.ok) {
+                const data = await profileRes.json();
+                setProfile(data);
+                await fetchPriceAnalysis();
+              }
               setScraping(false);
               setSuccessMessage(null);
-              showToast(`${platformName} menu scraped successfully! Found ${data.menu_items?.length || 0} items.`, 'success');
+              showToast(`${platformName} menu scraped successfully! Found ${status.items_scraped} items.`, 'success');
               return;
+            }
+
+            if (status.state === 'failed' || status.state === 'timeout') {
+              clearInterval(pollInterval);
+              setScraping(false);
+              setSuccessMessage(null);
+              showToast(status.error_message || 'Scraping failed. Please try again.', 'error');
+              return;
+            }
+
+            // Still running - update message
+            if (status.state === 'running' && pollCount > 15) {
+              setSuccessMessage(`Still scraping ${platformName} menu... This may take a few minutes.`);
             }
           }
         } catch (pollErr) {
@@ -266,7 +282,7 @@ export default function MyRestaurantPage() {
           clearInterval(pollInterval);
           setScraping(false);
           setSuccessMessage(null);
-          showToast('Scraping is taking longer than expected. Please refresh the page.', 'error');
+          showToast('Scraping is taking longer than expected. Please try again later.', 'error');
         }
       }, 2000);
 

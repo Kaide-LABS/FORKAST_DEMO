@@ -13,12 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import async_session
 from models import OperatorProfile, OperatorMenuItem
 from scraper.ubereats_scraper import UberEatsScraper
+from services.scrape_status import scrape_tracker, ScrapeState
+
+# Timeout for scraping operations (in seconds)
+SCRAPE_TIMEOUT = 180  # 3 minutes
 
 
 async def scrape_operator_menu_task(
     operator_id: str,
     url: str,
     platform: str,
+    job_id: str,
 ) -> None:
     """
     Background task to scrape operator's menu.
@@ -27,22 +32,59 @@ async def scrape_operator_menu_task(
         operator_id: ID of the operator profile
         url: URL to scrape
         platform: Platform name (ubereats or doordash)
+        job_id: ID of the scrape job for status tracking
     """
     print(f"Starting operator menu scrape: {platform} - {url}")
+
+    # Update status to running
+    await scrape_tracker.update_state(job_id, ScrapeState.RUNNING)
 
     scraper = None
     try:
         # Initialize scraper based on platform
         if platform == "ubereats":
             scraper = UberEatsScraper()
-            result = await scraper.scrape(url)
+
+            # Run scrape with timeout
+            try:
+                result = await asyncio.wait_for(
+                    scraper.scrape(url),
+                    timeout=SCRAPE_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                print(f"Operator scrape timed out after {SCRAPE_TIMEOUT}s")
+                await scrape_tracker.update_state(
+                    job_id,
+                    ScrapeState.TIMEOUT,
+                    error_message=f"Scraping timed out after {SCRAPE_TIMEOUT} seconds. The restaurant page may be too large or slow to load."
+                )
+                return
         else:
-            # TODO: Add DoorDash scraper support
+            # DoorDash scraping
             print(f"DoorDash scraping not yet implemented")
+            await scrape_tracker.update_state(
+                job_id,
+                ScrapeState.FAILED,
+                error_message="DoorDash scraping is not yet implemented. Please use Uber Eats URL."
+            )
             return
 
         if not result.success:
             print(f"Operator scrape failed: {result.error_message}")
+            await scrape_tracker.update_state(
+                job_id,
+                ScrapeState.FAILED,
+                error_message=result.error_message or "Failed to scrape menu items"
+            )
+            return
+
+        if not result.items:
+            print("No menu items found")
+            await scrape_tracker.update_state(
+                job_id,
+                ScrapeState.FAILED,
+                error_message="No menu items found on the page. Please check the URL is correct."
+            )
             return
 
         print(f"Scraped {len(result.items)} items from operator menu")
@@ -82,11 +124,38 @@ async def scrape_operator_menu_task(
             await session.commit()
             print(f"Saved {len(result.items)} operator menu items to database")
 
+        # Update status to success
+        await scrape_tracker.update_state(
+            job_id,
+            ScrapeState.SUCCESS,
+            items_scraped=len(result.items)
+        )
+
     except Exception as e:
-        print(f"Error scraping operator menu: {e}")
+        error_msg = str(e)
+        print(f"Error scraping operator menu: {error_msg}")
         import traceback
         traceback.print_exc()
 
+        # Provide user-friendly error messages
+        if "timeout" in error_msg.lower():
+            friendly_msg = "The page took too long to load. Please try again."
+        elif "net::" in error_msg.lower():
+            friendly_msg = "Could not connect to the website. Please check your URL."
+        elif "browser" in error_msg.lower():
+            friendly_msg = "Browser error occurred. Please try again later."
+        else:
+            friendly_msg = f"Scraping failed: {error_msg[:100]}"
+
+        await scrape_tracker.update_state(
+            job_id,
+            ScrapeState.FAILED,
+            error_message=friendly_msg
+        )
+
     finally:
         if scraper:
-            await scraper.close()
+            try:
+                await scraper.close()
+            except Exception:
+                pass
