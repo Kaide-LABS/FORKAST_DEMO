@@ -14,6 +14,7 @@ from database import async_session
 from models import OperatorProfile, OperatorMenuItem
 from scraper.ubereats_scraper import UberEatsScraper
 from services.scrape_status import scrape_tracker, ScrapeState
+from services.category_ai import category_ai_service
 
 # Timeout for scraping operations (in seconds)
 SCRAPE_TIMEOUT = 180  # 3 minutes
@@ -123,6 +124,24 @@ async def scrape_operator_menu_task(
 
             await session.commit()
             print(f"Saved {len(result.items)} operator menu items to database")
+
+            # Auto-map categories for the operator
+            try:
+                raw_categories = list(set(
+                    item.category for item in result.items
+                    if item.category
+                ))
+                if raw_categories:
+                    unmapped = await category_ai_service.get_unmapped_categories(
+                        session, "operator", operator_id, raw_categories
+                    )
+                    if unmapped:
+                        mapped = await category_ai_service.auto_map_categories(
+                            session, "operator", operator_id, unmapped, threshold=0.6
+                        )
+                        print(f"Auto-mapped {len(mapped)} categories for operator")
+            except Exception as e:
+                print(f"Category auto-mapping error (non-fatal): {e}")
 
         # Update status to success
         await scrape_tracker.update_state(
