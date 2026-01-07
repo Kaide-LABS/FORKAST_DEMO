@@ -67,21 +67,23 @@ class UberEatsScraper:
             await self._browser.stop()
             self._browser = None
 
-    async def _random_delay(self, min_sec: float = 0.5, max_sec: float = 1.5) -> None:
-        """Add random delay to appear more human-like."""
+    async def _random_delay(self, min_sec: float = 0.3, max_sec: float = 0.8) -> None:
+        """Add random delay to appear more human-like. Reduced for server-side scraping."""
         await asyncio.sleep(random.uniform(min_sec, max_sec))
 
-    async def _scroll_page(self, page: Page) -> None:
-        """Scroll through the page to load lazy content."""
+    async def _scroll_page(self, page: Page, max_scrolls: int = 20) -> None:
+        """Scroll through the page to load lazy content. Limited scrolls for performance."""
         scroll_height = await page.evaluate("document.body.scrollHeight")
 
         current_position = 0
-        while current_position < scroll_height:
-            scroll_amount = random.randint(400, 600)
+        scroll_count = 0
+        while current_position < scroll_height and scroll_count < max_scrolls:
+            scroll_amount = random.randint(600, 900)  # Larger jumps
             current_position += scroll_amount
+            scroll_count += 1
 
             await page.evaluate(f"window.scrollTo(0, {current_position})")
-            await self._random_delay(0.2, 0.4)
+            await asyncio.sleep(0.15)  # Faster scroll delay
 
             new_height = await page.evaluate("document.body.scrollHeight")
             if new_height > scroll_height:
@@ -89,7 +91,6 @@ class UberEatsScraper:
 
         # Scroll back to top
         await page.evaluate("window.scrollTo(0, 0)")
-        await self._random_delay(0.3, 0.5)
 
     async def _dismiss_cookie_banner(self, page: Page) -> None:
         """Try to dismiss cookie consent banner if present."""
@@ -122,8 +123,8 @@ class UberEatsScraper:
         async with browser.get_page() as page:
             try:
                 print(f"Navigating to: {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                await self._random_delay(2.0, 3.0)
+                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                await self._random_delay(1.0, 1.5)
 
                 # Dismiss cookie banner if present
                 await self._dismiss_cookie_banner(page)
@@ -131,7 +132,7 @@ class UberEatsScraper:
                 # Scroll to load all menu items
                 print("Scrolling to load menu items...")
                 await self._scroll_page(page)
-                await self._random_delay(1.0, 2.0)
+                await self._random_delay(0.5, 1.0)
 
                 # Get HTML and parse
                 html = await page.content()
