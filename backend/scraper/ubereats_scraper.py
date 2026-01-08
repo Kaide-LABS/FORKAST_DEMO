@@ -1,5 +1,5 @@
 """
-Uber Eats menu scraper using Playwright.
+Uber Eats menu scraper using async Playwright.
 
 Scrapes menu items, prices, and categories from Uber Eats restaurant pages.
 """
@@ -7,18 +7,17 @@ Scrapes menu items, prices, and categories from Uber Eats restaurant pages.
 import asyncio
 import random
 import re
+import time
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
 
 import json
 
 from bs4 import BeautifulSoup
-from playwright.async_api import Page
 
-from .stealth_browser import StealthBrowser
+from .stealth_browser import AsyncStealthBrowser, BrowserSessionExpiredError
 
 
 @dataclass
@@ -45,45 +44,39 @@ class ScrapeResult:
 
 class UberEatsScraper:
     """
-    Uber Eats menu scraper using Playwright with stealth measures.
-
-    No login required - restaurant pages are publicly accessible.
+    Async Uber Eats menu scraper using Playwright with stealth measures.
     """
 
-    def __init__(self, browser: Optional[StealthBrowser] = None):
-        self._browser = browser
-        self._owns_browser = browser is None
+    def __init__(self, browser=None):
+        # browser parameter kept for compatibility but ignored
+        self._browser: Optional[AsyncStealthBrowser] = None
 
-    async def _get_browser(self) -> StealthBrowser:
+    async def _get_browser(self) -> AsyncStealthBrowser:
         """Get or create a browser instance."""
         if self._browser is None:
-            self._browser = StealthBrowser(headless=True)
+            self._browser = AsyncStealthBrowser(headless=True)
             await self._browser.start()
         return self._browser
 
     async def close(self) -> None:
-        """Close the browser if we own it."""
-        if self._owns_browser and self._browser:
+        """Close the browser."""
+        if self._browser:
             await self._browser.stop()
             self._browser = None
 
-    async def _random_delay(self, min_sec: float = 0.1, max_sec: float = 0.3) -> None:
-        """Minimal delay for server-side scraping."""
-        await asyncio.sleep(random.uniform(min_sec, max_sec))
-
-    async def _scroll_page(self, page: Page, max_scrolls: int = 10) -> None:
-        """Fast scroll to load lazy content. Minimal scrolls for speed."""
+    async def _scroll_page(self, page, max_scrolls: int = 5) -> None:
+        """Fast scroll to load lazy content. Optimized for 60s session limit."""
         scroll_height = await page.evaluate("document.body.scrollHeight")
 
         current_position = 0
         scroll_count = 0
         while current_position < scroll_height and scroll_count < max_scrolls:
-            scroll_amount = 1500  # Big jumps for speed
+            scroll_amount = 3000  # Very big jumps for speed
             current_position += scroll_amount
             scroll_count += 1
 
             await page.evaluate(f"window.scrollTo(0, {current_position})")
-            await asyncio.sleep(0.05)  # Minimal scroll delay
+            await asyncio.sleep(0.02)  # Minimal scroll delay
 
             new_height = await page.evaluate("document.body.scrollHeight")
             if new_height > scroll_height:
@@ -92,28 +85,27 @@ class UberEatsScraper:
         # Scroll back to top
         await page.evaluate("window.scrollTo(0, 0)")
 
-    async def _dismiss_cookie_banner(self, page: Page) -> None:
+    async def _dismiss_cookie_banner(self, page) -> None:
         """Try to dismiss cookie consent banner if present."""
         try:
-            # Look for common accept buttons
             accept_btn = await page.query_selector('button:has-text("Accept"), button:has-text("Got it"), [data-testid="cookie-banner-accept"]')
             if accept_btn:
                 await accept_btn.click()
-                await self._random_delay(0.5, 1.0)
+                await asyncio.sleep(0.5)
         except Exception:
-            pass  # Ignore if no cookie banner
+            pass
 
     async def scrape(self, url: str) -> ScrapeResult:
-        """
-        Scrape menu items from an Uber Eats restaurant page.
+        """Scrape menu items from an Uber Eats restaurant page."""
+        import time
+        start_time = time.time()
 
-        Args:
-            url: Uber Eats restaurant URL
-
-        Returns:
-            ScrapeResult with scraped menu items
-        """
         browser = await self._get_browser()
+
+        # Ensure we have enough session time for a scrape (45s navigation + buffer)
+        await browser.ensure_fresh_session(required_time=50)
+        print(f"Session remaining: {browser.get_remaining_time():.1f}s")
+
         result = ScrapeResult(
             restaurant_name="Unknown",
             platform="ubereats",
@@ -123,8 +115,9 @@ class UberEatsScraper:
         async with browser.get_page() as page:
             try:
                 print(f"Navigating to: {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(0.5)  # Brief wait for JS
+                # Reduced timeout for Browserless free tier (60s session limit)
+                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                print(f"Page loaded in {time.time() - start_time:.1f}s (session: {browser.get_remaining_time():.1f}s left)")
 
                 # Dismiss cookie banner if present
                 await self._dismiss_cookie_banner(page)
@@ -132,7 +125,6 @@ class UberEatsScraper:
                 # Scroll to load all menu items
                 print("Scrolling to load menu items...")
                 await self._scroll_page(page)
-                await asyncio.sleep(0.3)  # Brief pause after scroll
 
                 # Get HTML and parse
                 html = await page.content()
@@ -158,19 +150,17 @@ class UberEatsScraper:
                 result.success = False
                 result.error_message = str(e)
                 print(f"Scrape error: {e}")
+                # Check if this is a session expiry error and re-raise as specific exception
+                if browser._is_session_expired_error(e):
+                    raise BrowserSessionExpiredError(f"Session expired during scrape: {e}")
 
         return result
 
     def _parse_menu_html(self, html: str) -> list[ScrapedMenuItem]:
-        """
-        Parse menu items from Uber Eats HTML.
-
-        First tries JSON-LD structured data (most reliable),
-        then falls back to HTML parsing.
-        """
+        """Parse menu items from Uber Eats HTML."""
         soup = BeautifulSoup(html, "html.parser")
 
-        # Try JSON-LD extraction first (most reliable for categories)
+        # Try JSON-LD extraction first
         items = self._extract_from_json_ld(soup)
         if items:
             print(f"Extracted {len(items)} items from JSON-LD data")
@@ -181,11 +171,7 @@ class UberEatsScraper:
         return self._parse_menu_from_html(soup)
 
     def _extract_from_json_ld(self, soup: BeautifulSoup) -> list[ScrapedMenuItem]:
-        """
-        Extract menu items from JSON-LD structured data (schema.org format).
-
-        This captures the actual category names from the restaurant's menu.
-        """
+        """Extract menu items from JSON-LD structured data."""
         items = []
         position = 0
 
@@ -195,7 +181,6 @@ class UberEatsScraper:
                 if not isinstance(data, dict):
                     continue
 
-                # Look for hasMenu -> hasMenuSection structure
                 menu = data.get('hasMenu')
                 if not menu or 'hasMenuSection' not in menu:
                     continue
@@ -209,7 +194,6 @@ class UberEatsScraper:
                         if not name:
                             continue
 
-                        # Extract price from offers
                         price = Decimal("0.00")
                         offers = menu_item.get('offers', {})
                         if isinstance(offers, dict):
@@ -242,17 +226,13 @@ class UberEatsScraper:
         return items
 
     def _parse_menu_from_html(self, soup: BeautifulSoup) -> list[ScrapedMenuItem]:
-        """
-        Fallback HTML parsing for menu items.
-        """
+        """Fallback HTML parsing for menu items."""
         items = []
         position = 0
         seen_names = set()
 
-        # Detect currency (£ for UK, $ for US)
         price_pattern = re.compile(r'[£$](\d+(?:\.\d{2})?)')
 
-        # Find all catalog sections
         catalog_sections = soup.find_all(attrs={'data-testid': 'store-catalog-section-vertical-grid'})
 
         for section in catalog_sections:
@@ -277,7 +257,6 @@ class UberEatsScraper:
                         seen_names.add(item.name)
                         position += 1
 
-        # If no sections found, find all store items directly
         if not items:
             store_items = soup.find_all(attrs={'data-testid': re.compile(r'^store-item-')})
             for element in store_items:
@@ -313,18 +292,15 @@ class UberEatsScraper:
         try:
             name = None
 
-            # Method 1: Get name from image alt attribute
             img = element.find('img')
             if img and img.get('alt'):
                 name = img['alt'].strip()
 
-            # Method 2: Get from h3 if no image alt
             if not name:
                 h3 = element.find('h3')
                 if h3:
                     name = h3.get_text(strip=True)
 
-            # Method 3: Try first significant span
             if not name:
                 for span in element.find_all('span'):
                     text = span.get_text(strip=True)
@@ -335,16 +311,13 @@ class UberEatsScraper:
             if not name or len(name) < 2:
                 return None
 
-            # Extract price
             price = Decimal("0.00")
             text_content = element.get_text()
             price_match = price_pattern.search(text_content)
             if price_match:
                 price = Decimal(price_match.group(1))
 
-            # Try to get description (usually in a smaller text element)
             description = None
-            # Look for calorie info or description text
             cal_match = re.search(r'(\d+)\s*Cal', text_content)
             if cal_match:
                 description = f"{cal_match.group(1)} calories"
@@ -361,28 +334,6 @@ class UberEatsScraper:
             print(f"Error extracting item: {e}")
             return None
 
-    async def debug_dump(self, url: str, output_file: str = "debug_ubereats.html") -> str:
-        """
-        Navigate to an Uber Eats restaurant page and dump the full HTML for inspection.
-        """
-        browser = await self._get_browser()
-        output_path = Path(output_file)
 
-        async with browser.get_page() as page:
-            try:
-                print(f"Navigating to: {url}")
-                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                await self._random_delay(3.0, 5.0)
-                await self._scroll_page(page)
-
-                html_content = await page.content()
-                output_path.write_text(html_content, encoding="utf-8")
-                print(f"HTML dumped to: {output_path.absolute()}")
-
-                return str(output_path.absolute())
-
-            except Exception as e:
-                error_html = f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>"
-                output_path.write_text(error_html, encoding="utf-8")
-                print(f"Error during dump: {e}")
-                return str(output_path.absolute())
+# Backward compatibility alias
+SyncUberEatsScraper = UberEatsScraper

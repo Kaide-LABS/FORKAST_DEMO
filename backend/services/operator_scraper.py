@@ -13,11 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import async_session
 from models import OperatorProfile, OperatorMenuItem
 from scraper.ubereats_scraper import UberEatsScraper
+from scraper.stealth_browser import BrowserlessRateLimitError, BrowserConnectionError, BrowserSessionExpiredError
 from services.scrape_status import scrape_tracker, ScrapeState
 from services.category_ai import category_ai_service
 
 # Timeout for scraping operations (in seconds)
-SCRAPE_TIMEOUT = 180  # 3 minutes
+# Need long timeout due to Cloud Run idle behavior delaying task start
+# Actual Browserless scraping is fast (~10-30s) once it starts
+SCRAPE_TIMEOUT = 600
 
 
 async def scrape_operator_menu_task(
@@ -150,6 +153,30 @@ async def scrape_operator_menu_task(
             items_scraped=len(result.items)
         )
 
+    except BrowserlessRateLimitError as e:
+        print(f"Browserless rate limit hit: {e}")
+        await scrape_tracker.update_state(
+            job_id,
+            ScrapeState.FAILED,
+            error_message="Service is temporarily busy. Please wait 30 seconds and try again."
+        )
+
+    except BrowserConnectionError as e:
+        print(f"Browser connection error: {e}")
+        await scrape_tracker.update_state(
+            job_id,
+            ScrapeState.FAILED,
+            error_message="Could not connect to browser service. Please try again."
+        )
+
+    except BrowserSessionExpiredError as e:
+        print(f"Browser session expired: {e}")
+        await scrape_tracker.update_state(
+            job_id,
+            ScrapeState.FAILED,
+            error_message="Browser session expired during scraping. Please try again."
+        )
+
     except Exception as e:
         error_msg = str(e)
         print(f"Error scraping operator menu: {error_msg}")
@@ -157,7 +184,9 @@ async def scrape_operator_menu_task(
         traceback.print_exc()
 
         # Provide user-friendly error messages
-        if "timeout" in error_msg.lower():
+        if "429" in error_msg or "rate limit" in error_msg.lower():
+            friendly_msg = "Service is temporarily busy. Please wait 30 seconds and try again."
+        elif "timeout" in error_msg.lower():
             friendly_msg = "The page took too long to load. Please try again."
         elif "net::" in error_msg.lower():
             friendly_msg = "Could not connect to the website. Please check your URL."
