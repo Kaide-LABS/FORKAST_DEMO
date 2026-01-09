@@ -43,21 +43,21 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 
 # Seed data for canonical categories
 SEED_CATEGORIES = [
-    ("Burgers", "Hamburgers, cheeseburgers, specialty burgers", "burger,hamburger,cheeseburger,patty"),
+    ("Burgers", "Hamburgers, cheeseburgers, specialty burgers, beef", "burger,hamburger,cheeseburger,patty,beef,burgers"),
     ("Chicken", "Fried chicken, grilled chicken, wings, nuggets, tenders", "chicken,wings,nuggets,tenders,fried,poultry"),
-    ("Sandwiches & Wraps", "Subs, wraps, paninis, hoagies", "sandwich,wrap,sub,panini,hoagie,deli"),
-    ("Bowls & Salads", "Rice bowls, grain bowls, salads, poke", "bowl,salad,poke,grain,rice bowl"),
-    ("Vegan & Plant-Based", "Vegan, vegetarian, plant-based options", "vegan,vegetarian,plant-based,veggie,meatless"),
-    ("Sides", "Fries, onion rings, coleslaw, sides", "side,fries,onion rings,coleslaw,potato"),
-    ("Beverages", "Drinks, sodas, shakes, smoothies", "drink,beverage,soda,shake,smoothie,coffee,tea"),
-    ("Desserts", "Ice cream, cookies, cakes, sweets", "dessert,ice cream,cookie,cake,sweet,pie"),
+    ("Sandwiches & Wraps", "Subs, wraps, paninis, hoagies", "sandwich,wrap,sub,panini,hoagie,deli,sandwiches,wraps"),
+    ("Bowls & Salads", "Rice bowls, grain bowls, salads, poke", "bowl,salad,poke,grain,rice bowl,bowls,salads"),
+    ("Vegan & Plant-Based", "Vegan, vegetarian, plant-based options", "vegan,vegetarian,plant-based,veggie,meatless,plant"),
+    ("Sides", "Fries, onion rings, coleslaw, sides", "side,fries,onion rings,coleslaw,potato,sides"),
+    ("Beverages", "Drinks, sodas, shakes, smoothies", "drink,beverage,soda,shake,smoothie,coffee,tea,drinks,beverages"),
+    ("Desserts", "Ice cream, cookies, cakes, sweets", "dessert,ice cream,cookie,cake,sweet,pie,desserts"),
     ("Breakfast", "Morning items, eggs, pancakes, breakfast sandwiches", "breakfast,eggs,pancake,waffle,morning,brunch"),
-    ("Combos & Meals", "Value meals, combo deals, family packs", "combo,meal,value,deal,family,bundle"),
-    ("Appetizers", "Starters, shareables, apps", "appetizer,starter,shareable,app,snack"),
-    ("Pizza & Flatbreads", "Pizzas, flatbreads, calzones", "pizza,flatbread,calzone,slice"),
+    ("Combos & Meals", "Value meals, combo deals, family packs", "combo,meal,value,deal,family,bundle,meals,deals"),
+    ("Appetizers", "Starters, shareables, apps", "appetizer,starter,shareable,app,snack,appetizers"),
+    ("Pizza & Flatbreads", "Pizzas, flatbreads, calzones", "pizza,flatbread,calzone,slice,pizzas"),
     ("Seafood", "Fish, shrimp, seafood items", "seafood,fish,shrimp,crab,lobster,salmon"),
-    ("Mexican", "Tacos, burritos, quesadillas, nachos", "taco,burrito,quesadilla,nacho,mexican,tex-mex"),
-    ("Asian", "Noodles, rice dishes, stir-fry, Asian cuisine", "asian,noodle,rice,stir-fry,chinese,japanese,thai"),
+    ("Mexican", "Tacos, burritos, quesadillas, nachos", "taco,burrito,quesadilla,nacho,mexican,tex-mex,tacos,burritos"),
+    ("Asian", "Noodles, rice dishes, stir-fry, Asian cuisine", "asian,noodle,rice,stir-fry,chinese,japanese,thai,noodles"),
 ]
 
 

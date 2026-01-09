@@ -149,6 +149,25 @@ class CategoryAIService:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    def _check_exact_match(
+        self,
+        raw_category: str,
+        canonical: CanonicalCategory
+    ) -> float | None:
+        """
+        Check for exact string match only.
+        Returns 0.99 if exact match, None otherwise.
+        """
+        # Clean and normalize the raw category
+        raw_clean = strip_emojis(raw_category).lower().strip()
+        canonical_name = canonical.name.lower().strip()
+
+        # Exact match (case insensitive, emoji stripped)
+        if raw_clean == canonical_name:
+            return 0.99
+
+        return None
+
     async def find_best_match(
         self,
         raw_category: str,
@@ -157,19 +176,31 @@ class CategoryAIService:
         """
         Find the best matching canonical category for a raw category.
 
+        Uses AI embeddings for semantic matching - lets the AI figure out
+        correlations automatically without manual keyword lists.
+
         Returns (canonical_category, similarity_score) or None if no good match.
         """
         if not canonical_categories:
             return None
 
+        # First, check for exact string match (fast, no API call)
+        for canonical in canonical_categories:
+            exact_score = self._check_exact_match(raw_category, canonical)
+            if exact_score is not None:
+                return (canonical, exact_score)
+
+        # Use AI embeddings for semantic matching
         raw_embedding = self._get_embedding_sync(raw_category)
 
         best_match = None
         best_score = 0.0
 
         for canonical in canonical_categories:
-            # Create search text from canonical name + keywords
+            # Use canonical name + description for richer semantic context
             search_text = canonical.name
+            if canonical.description:
+                search_text += " " + canonical.description
             if canonical.keywords:
                 search_text += " " + canonical.keywords
 
@@ -180,7 +211,8 @@ class CategoryAIService:
                 best_score = score
                 best_match = canonical
 
-        if best_match and best_score >= 0.5:  # Minimum threshold for any match
+        # Lower threshold to let AI make more connections
+        if best_match and best_score >= 0.4:
             return (best_match, best_score)
 
         return None
@@ -192,6 +224,7 @@ class CategoryAIService:
     ) -> list[CategorySuggestion]:
         """
         Generate mapping suggestions for a list of raw categories.
+        Uses AI embeddings for semantic matching - fully autonomous.
         Returns suggestions with confidence scores and alternatives.
         """
         canonical_categories = await self.get_all_canonical_categories(db)
@@ -202,12 +235,34 @@ class CategoryAIService:
         suggestions = []
 
         for raw_cat in raw_categories:
+            # Check for exact string match first
+            exact_match = None
+            for canonical in canonical_categories:
+                score = self._check_exact_match(raw_cat, canonical)
+                if score is not None:
+                    exact_match = canonical
+                    break
+
+            if exact_match:
+                suggestions.append(CategorySuggestion(
+                    raw_category=raw_cat,
+                    canonical_category_id=exact_match.id,
+                    canonical_category_name=exact_match.name,
+                    confidence_score=0.99,
+                    alternatives=[]
+                ))
+                continue
+
+            # Use AI embeddings for semantic matching
             raw_embedding = self._get_embedding_sync(raw_cat)
 
-            # Score all canonical categories
+            # Score all canonical categories using AI
             scored = []
             for canonical in canonical_categories:
+                # Use canonical name + description for richer semantic context
                 search_text = canonical.name
+                if canonical.description:
+                    search_text += " " + canonical.description
                 if canonical.keywords:
                     search_text += " " + canonical.keywords
 
@@ -218,12 +273,13 @@ class CategoryAIService:
             # Sort by score descending
             scored.sort(key=lambda x: x[1], reverse=True)
 
-            if scored and scored[0][1] >= 0.5:
+            # Lower threshold to allow AI to make semantic connections
+            if scored and scored[0][1] >= 0.4:
                 best = scored[0]
                 alternatives = [
                     (cat.id, cat.name, round(score, 4))
                     for cat, score in scored[1:4]  # Top 3 alternatives
-                    if score >= 0.4
+                    if score >= 0.35
                 ]
 
                 suggestions.append(CategorySuggestion(

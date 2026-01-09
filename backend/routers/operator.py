@@ -5,12 +5,13 @@ Provides endpoints for managing the operator's own restaurant profile,
 menu scraping, and price comparison analysis.
 """
 
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -142,7 +143,6 @@ async def delete_operator_profile(db: DB) -> dict:
 
 @router.post("/scrape")
 async def scrape_operator_menu(
-    background_tasks: BackgroundTasks,
     db: DB,
     platform: str = Query(default="ubereats", pattern="^(ubereats|doordash)$"),
 ) -> dict:
@@ -180,8 +180,8 @@ async def scrape_operator_menu(
         url=url,
     )
 
-    # Run scraping in background
-    background_tasks.add_task(scrape_operator_menu_task, profile.id, url, platform, job.job_id)
+    # Run scraping in background using asyncio.create_task for immediate execution
+    asyncio.create_task(scrape_operator_menu_task(profile.id, url, platform, job.job_id))
 
     return {
         "status": "started",

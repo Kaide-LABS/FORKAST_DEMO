@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session
 from models import Competitor, MenuItem, PriceHistory, Alert
+from services.category_ai import category_ai_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,14 +36,25 @@ scheduler_status = {
 }
 
 
-# Mock menu data for fallback (simplified version)
+# Mock menu data for fallback (comprehensive categories for comparison)
 MOCK_MENU_ITEMS = {
     "Burger": [
         {"name": "Classic Cheeseburger", "price": "11.99", "description": "1/4 lb beef patty with American cheese"},
         {"name": "Bacon BBQ Burger", "price": "14.99", "description": "1/3 lb patty with crispy bacon, BBQ sauce"},
         {"name": "Mushroom Swiss Burger", "price": "13.49", "description": "Sautéed mushrooms, Swiss cheese"},
         {"name": "Double Stack Burger", "price": "16.99", "description": "Two 1/4 lb patties, double cheese"},
-        {"name": "Veggie Burger", "price": "12.49", "description": "Plant-based patty with avocado"},
+    ],
+    "Chicken": [
+        {"name": "Crispy Chicken Sandwich", "price": "10.99", "description": "Breaded chicken breast, pickles, mayo"},
+        {"name": "Grilled Chicken Sandwich", "price": "11.49", "description": "Grilled chicken breast with lettuce and tomato"},
+        {"name": "Chicken Tenders (5pc)", "price": "9.99", "description": "Hand-breaded chicken tenders"},
+        {"name": "Spicy Chicken Sandwich", "price": "11.99", "description": "Spicy breaded chicken with jalapeños"},
+        {"name": "Buffalo Chicken Wrap", "price": "10.49", "description": "Crispy chicken, buffalo sauce, ranch"},
+    ],
+    "Plant-Based": [
+        {"name": "Impossible Burger", "price": "13.99", "description": "Plant-based patty with vegan cheese"},
+        {"name": "Beyond Chicken Sandwich", "price": "12.99", "description": "Plant-based chicken with veggies"},
+        {"name": "Veggie Wrap", "price": "10.99", "description": "Grilled vegetables, hummus, spinach"},
     ],
     "Sides": [
         {"name": "French Fries", "price": "4.99", "description": "Crispy golden fries"},
@@ -58,6 +70,17 @@ MOCK_MENU_ITEMS = {
     "Desserts": [
         {"name": "Chocolate Brownie", "price": "5.99", "description": "Warm fudge brownie"},
         {"name": "Apple Pie", "price": "4.99", "description": "Classic apple pie slice"},
+    ],
+    "Sauces": [
+        {"name": "BBQ Sauce", "price": "0.75", "description": "Smoky barbecue dipping sauce"},
+        {"name": "Ranch Dressing", "price": "0.75", "description": "Creamy ranch dip"},
+        {"name": "Hot Sauce", "price": "0.50", "description": "Spicy buffalo sauce"},
+        {"name": "Honey Mustard", "price": "0.75", "description": "Sweet and tangy dip"},
+    ],
+    "Meal Deals": [
+        {"name": "Burger Combo", "price": "14.99", "description": "Any burger with fries and drink"},
+        {"name": "Chicken Combo", "price": "13.99", "description": "Chicken sandwich with fries and drink"},
+        {"name": "Family Pack", "price": "39.99", "description": "4 burgers, 2 large fries, 4 drinks"},
     ],
 }
 
@@ -188,10 +211,31 @@ async def scrape_competitor(db: AsyncSession, competitor: Competitor) -> dict:
     # Update competitor's last_scraped_at
     competitor.last_scraped_at = datetime.now(timezone.utc)
 
+    # Auto-map categories for the competitor
+    categories_mapped = 0
+    try:
+        raw_categories = list(set(
+            item_data.get("category") for item_data in items_data
+            if item_data.get("category")
+        ))
+        if raw_categories:
+            unmapped = await category_ai_service.get_unmapped_categories(
+                db, "competitor", competitor.id, raw_categories
+            )
+            if unmapped:
+                mapped = await category_ai_service.auto_map_categories(
+                    db, "competitor", competitor.id, unmapped, threshold=0.5
+                )
+                categories_mapped = len(mapped)
+                logger.info(f"Auto-mapped {categories_mapped} categories for {competitor.name}")
+    except Exception as e:
+        logger.warning(f"Category auto-mapping error for {competitor.name}: {e}")
+
     return {
         "success": True,
         "items_count": len(new_items),
         "alerts_created": alerts_created,
+        "categories_mapped": categories_mapped,
         "source": scrape_source,
     }
 

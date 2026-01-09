@@ -140,7 +140,7 @@ async def scrape_operator_menu_task(
                     )
                     if unmapped:
                         mapped = await category_ai_service.auto_map_categories(
-                            session, "operator", operator_id, unmapped, threshold=0.6
+                            session, "operator", operator_id, unmapped, threshold=0.5
                         )
                         print(f"Auto-mapped {len(mapped)} categories for operator")
             except Exception as e:
