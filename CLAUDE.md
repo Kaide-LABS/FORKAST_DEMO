@@ -7,9 +7,9 @@ Forkast is a food delivery aggregation demo with:
 - **Scraper**: UberEats scraper using Browserless.io for browser automation
 
 ## Current Priorities
-1. Complete any uncommitted changes and deploy
-2. Test scraper reliability with Browserless session management
-3. Ensure production API URLs are correctly configured
+1. Add more competitors to enrich market data
+2. Consider Cloud SQL for persistent production database (SQLite resets on Cloud Run redeploy)
+3. Add Chicken-focused competitors for that category comparison
 
 ## Known Issues / Context
 - Browserless.io free tier has 60-second session limits - scraper must be time-aware
@@ -27,21 +27,21 @@ Forkast is a food delivery aggregation demo with:
 
 ## Session Handoff Notes
 Last updated: 2026-01-09
-Status: Session ending - uncommitted changes present
+Status: All deployed and working
 
-### Uncommitted Changes:
-1. **backend/scraper/ubereats_scraper.py** - Added time-aware session management:
-   - Checks remaining Browserless session time before actions
-   - Skips cookie banner dismissal if < 15s remaining
-   - Reduces or skips scrolling if < 10-20s remaining
-   - Prioritizes getting content quickly when time is critical
+### Completed This Session:
+1. **Committed and deployed** time-aware Browserless session management
+2. **Updated Cloud Run API URL** across all frontend files
+3. **Deployed backend** to Cloud Run (forkast-api-84498540486.us-central1.run.app)
+4. **Deployed frontend** to Netlify (forkast-dashboard.netlify.app)
+5. **Tested scraper in production** - Successfully scraped 56 items from Krystal UberEats in ~51 seconds
 
-2. **frontend/netlify.toml, route.ts, config.ts** - Updated Cloud Run API URL:
-   - Changed from `forkast-api-249426017768.us-central1.run.app` and `forkast-api-6utnmdj4rq-uc.a.run.app`
-   - To new URL: `forkast-api-84498540486.us-central1.run.app`
+### Current State:
+- Scraper fully functional with time-aware session management
+- Krystal added as competitor with 56 menu items (11 categories)
+- Production DB will reset on redeploy (SQLite limitation on Cloud Run)
 
 ### Next Steps:
-- Review uncommitted changes
-- Commit if changes are correct
-- Deploy frontend to Netlify with updated API URL
-- Test scraper with Browserless session time management
+- Add more competitors for richer market comparison data
+- Consider Cloud SQL for persistent database
+- Category auto-mapping returned 0 for Krystal - may need investigation
