@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Use 127.0.0.1 instead of localhost to avoid IPv6 issues
 const BACKEND_URL = process.env.NODE_ENV === 'development'
   ? 'http://127.0.0.1:8000'
-  : 'https://forkast-api-249426017768.us-central1.run.app';
+  : 'https://forkast-api-84498540486.us-central1.run.app';
 
 // Endpoints that require trailing slash for POST/PUT to avoid 307 redirects
 // Only exact matches - NOT paths with IDs after them

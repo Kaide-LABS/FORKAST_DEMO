@@ -117,16 +117,27 @@ class UberEatsScraper:
                 print(f"Navigating to: {url}")
                 # Reduced timeout for Browserless free tier (60s session limit)
                 await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                print(f"Page loaded in {time.time() - start_time:.1f}s (session: {browser.get_remaining_time():.1f}s left)")
+                remaining_time = browser.get_remaining_time()
+                print(f"Page loaded in {time.time() - start_time:.1f}s (session: {remaining_time:.1f}s left)")
 
-                # Dismiss cookie banner if present
-                await self._dismiss_cookie_banner(page)
+                # Check if we have enough time to continue
+                if remaining_time < 5:
+                    print(f"Session time critically low ({remaining_time:.1f}s), getting content immediately")
+                else:
+                    # Dismiss cookie banner if present (skip if time is low)
+                    if remaining_time > 15:
+                        await self._dismiss_cookie_banner(page)
 
-                # Scroll to load all menu items
-                print("Scrolling to load menu items...")
-                await self._scroll_page(page)
+                    # Scroll to load menu items (skip if time is low)
+                    if remaining_time > 10:
+                        print("Scrolling to load menu items...")
+                        # Reduce scrolls if time is limited
+                        max_scrolls = 5 if remaining_time > 20 else 2
+                        await self._scroll_page(page, max_scrolls=max_scrolls)
+                    else:
+                        print(f"Skipping scroll due to low session time ({remaining_time:.1f}s)")
 
-                # Get HTML and parse
+                # Get HTML and parse - do this as quickly as possible
                 html = await page.content()
 
                 # Try to get restaurant name from h1
