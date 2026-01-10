@@ -46,11 +46,11 @@ export default function Sidebar() {
         </nav>
 
         {/* User section */}
-        <div className="px-6 py-4 border-t border-slate-800">
+        <div className="px-4 py-4 border-t border-slate-800">
           {session?.user && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-forkast-green-500 flex items-center justify-center text-white text-sm font-medium">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-forkast-green-500 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
                   {session.user.email?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <span className="text-sm text-slate-300 truncate">
@@ -59,7 +59,7 @@ export default function Sidebar() {
               </div>
               <button
                 onClick={() => signOut({ callbackUrl: '/sign-in' })}
-                className="text-xs text-slate-400 hover:text-white transition-colors"
+                className="w-full text-sm text-slate-400 hover:text-white hover:bg-slate-800 py-2 px-3 rounded-lg transition-colors text-left"
               >
                 Sign out
               </button>
