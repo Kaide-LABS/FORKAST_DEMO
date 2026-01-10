@@ -28,6 +28,7 @@ async def scrape_operator_menu_task(
     url: str,
     platform: str,
     job_id: str,
+    tenant_id: str = "default",
 ) -> None:
     """
     Background task to scrape operator's menu.
@@ -37,6 +38,7 @@ async def scrape_operator_menu_task(
         url: URL to scrape
         platform: Platform name (ubereats or doordash)
         job_id: ID of the scrape job for status tracking
+        tenant_id: Tenant identifier for multi-tenant support
     """
     print(f"Starting operator menu scrape: {platform} - {url}")
 
@@ -136,11 +138,11 @@ async def scrape_operator_menu_task(
                 ))
                 if raw_categories:
                     unmapped = await category_ai_service.get_unmapped_categories(
-                        session, "operator", operator_id, raw_categories
+                        session, "operator", operator_id, raw_categories, tenant_id
                     )
                     if unmapped:
                         mapped = await category_ai_service.auto_map_categories(
-                            session, "operator", operator_id, unmapped, threshold=0.5
+                            session, "operator", operator_id, unmapped, threshold=0.5, tenant_id=tenant_id
                         )
                         print(f"Auto-mapped {len(mapped)} categories for operator")
             except Exception as e:

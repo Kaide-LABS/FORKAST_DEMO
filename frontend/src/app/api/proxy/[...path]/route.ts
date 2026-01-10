@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/auth';
 
 // Use local backend for development, production backend otherwise
 // Use 127.0.0.1 instead of localhost to avoid IPv6 issues
@@ -13,6 +14,17 @@ const TRAILING_SLASH_ENDPOINTS = [
   'api/v1/alerts',
 ];
 
+// Helper to get headers with tenant ID from NextAuth session
+async function getProxyHeaders(): Promise<Record<string, string>> {
+  const session = await auth();
+  // Use NextAuth user ID as tenant ID, fallback to 'default' if not authenticated
+  const tenantId = session?.user?.id || 'default';
+  return {
+    'Content-Type': 'application/json',
+    'X-Tenant-ID': tenantId,
+  };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -25,9 +37,7 @@ export async function GET(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getProxyHeaders(),
     });
 
     const data = await response.json();
@@ -64,9 +74,7 @@ export async function POST(
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getProxyHeaders(),
       body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -103,9 +111,7 @@ export async function PUT(
 
     const response = await fetch(url, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getProxyHeaders(),
       body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -131,9 +137,7 @@ export async function DELETE(
   try {
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await getProxyHeaders(),
     });
 
     // DELETE might return 204 No Content

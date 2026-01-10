@@ -35,6 +35,7 @@ from schemas import (
     CategoryComparisonResponse,
 )
 from services.category_ai import category_ai_service
+from tenant import get_tenant_id
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -158,6 +159,7 @@ async def delete_canonical_category(category_id: str, db: DB) -> None:
 @router.get("/mappings", response_model=list[CategoryMappingRead])
 async def list_mappings(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     source_type: Optional[str] = Query(default=None, pattern="^(competitor|operator)$"),
     source_id: Optional[str] = Query(default=None),
 ) -> list[CategoryMapping]:
@@ -170,7 +172,7 @@ async def list_mappings(
     """
     stmt = select(CategoryMapping).options(
         selectinload(CategoryMapping.canonical_category)
-    )
+    ).where(CategoryMapping.tenant_id == tenant_id)
 
     if source_type:
         stmt = stmt.where(CategoryMapping.source_type == source_type)
@@ -185,7 +187,8 @@ async def list_mappings(
 @router.post("/mappings", response_model=CategoryMappingRead, status_code=status.HTTP_201_CREATED)
 async def create_mapping(
     data: CategoryMappingCreate,
-    db: DB
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> CategoryMapping:
     """
     Create or update a category mapping.
@@ -203,11 +206,12 @@ async def create_mapping(
             detail="Canonical category not found"
         )
 
-    # Check for existing mapping
+    # Check for existing mapping (within this tenant)
     existing_stmt = select(CategoryMapping).where(
         CategoryMapping.source_type == data.source_type,
         CategoryMapping.source_id == data.source_id,
-        CategoryMapping.raw_category == data.raw_category
+        CategoryMapping.raw_category == data.raw_category,
+        CategoryMapping.tenant_id == tenant_id,
     )
     existing_result = await db.execute(existing_stmt)
     existing = existing_result.scalar_one_or_none()
@@ -229,6 +233,7 @@ async def create_mapping(
 
     # Create new
     mapping = CategoryMapping(
+        tenant_id=tenant_id,
         source_type=data.source_type,
         source_id=data.source_id,
         raw_category=data.raw_category,
@@ -252,10 +257,14 @@ async def create_mapping(
 async def update_mapping(
     mapping_id: str,
     data: CategoryMappingUpdate,
-    db: DB
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> CategoryMapping:
     """Update an existing category mapping."""
-    stmt = select(CategoryMapping).where(CategoryMapping.id == mapping_id)
+    stmt = select(CategoryMapping).where(
+        CategoryMapping.id == mapping_id,
+        CategoryMapping.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     mapping = result.scalar_one_or_none()
 
@@ -293,9 +302,16 @@ async def update_mapping(
 
 
 @router.delete("/mappings/{mapping_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_mapping(mapping_id: str, db: DB) -> None:
+async def delete_mapping(
+    mapping_id: str,
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> None:
     """Delete a category mapping."""
-    stmt = select(CategoryMapping).where(CategoryMapping.id == mapping_id)
+    stmt = select(CategoryMapping).where(
+        CategoryMapping.id == mapping_id,
+        CategoryMapping.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     mapping = result.scalar_one_or_none()
 
@@ -316,6 +332,7 @@ async def delete_mapping(mapping_id: str, db: DB) -> None:
 @router.get("/suggest", response_model=list[CategorySuggestionRead])
 async def suggest_mappings(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     source_type: str = Query(..., pattern="^(competitor|operator)$"),
     source_id: str = Query(...),
 ) -> list[CategorySuggestionRead]:
@@ -348,7 +365,7 @@ async def suggest_mappings(
 
     # Get unmapped categories
     unmapped = await category_ai_service.get_unmapped_categories(
-        db, source_type, source_id, raw_categories
+        db, source_type, source_id, raw_categories, tenant_id
     )
 
     if not unmapped:
@@ -376,9 +393,10 @@ async def suggest_mappings(
 @router.post("/auto-map")
 async def auto_map_categories(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     source_type: str = Query(..., pattern="^(competitor|operator)$"),
     source_id: str = Query(...),
-    threshold: float = Query(default=0.8, ge=0.5, le=1.0),
+    threshold: float = Query(default=0.4, ge=0.3, le=1.0),
 ) -> dict:
     """
     Automatically map categories with high AI confidence.
@@ -408,7 +426,7 @@ async def auto_map_categories(
 
     # Get unmapped categories
     unmapped = await category_ai_service.get_unmapped_categories(
-        db, source_type, source_id, raw_categories
+        db, source_type, source_id, raw_categories, tenant_id
     )
 
     if not unmapped:
@@ -416,7 +434,7 @@ async def auto_map_categories(
 
     # Auto-map
     created = await category_ai_service.auto_map_categories(
-        db, source_type, source_id, unmapped, threshold
+        db, source_type, source_id, unmapped, threshold, tenant_id
     )
 
     return {
@@ -431,15 +449,20 @@ async def auto_map_categories(
 # =============================================================================
 
 @router.get("/comparison", response_model=CategoryComparisonResponse)
-async def get_category_comparison(db: DB) -> CategoryComparisonResponse:
+async def get_category_comparison(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> CategoryComparisonResponse:
     """
     Get semantic category comparison between operator and market.
 
     Uses canonical categories to group items semantically across different
     restaurants' category naming conventions.
     """
-    # Get operator profile
-    op_stmt = select(OperatorProfile).limit(1)
+    # Get operator profile (filtered by tenant)
+    op_stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     op_result = await db.execute(op_stmt)
     operator = op_result.scalar_one_or_none()
 
@@ -463,9 +486,10 @@ async def get_category_comparison(db: DB) -> CategoryComparisonResponse:
     op_mappings_result = await db.execute(op_mappings_stmt)
     op_mappings = {m.raw_category: m.canonical_category_id for m in op_mappings_result.scalars().all()}
 
-    # Get competitor category mappings
+    # Get competitor category mappings (filtered by tenant)
     comp_mappings_stmt = select(CategoryMapping).where(
-        CategoryMapping.source_type == "competitor"
+        CategoryMapping.source_type == "competitor",
+        CategoryMapping.tenant_id == tenant_id,
     )
     comp_mappings_result = await db.execute(comp_mappings_stmt)
     comp_mappings_raw = comp_mappings_result.scalars().all()
@@ -493,10 +517,13 @@ async def get_category_comparison(db: DB) -> CategoryComparisonResponse:
         elif item.category:
             unmapped_op_categories.add(item.category)
 
-    # Get competitor items grouped by canonical category
+    # Get competitor items grouped by canonical category (filtered by tenant)
     comp_items_stmt = select(MenuItem, Competitor.id.label("comp_id")).join(
         Competitor, MenuItem.competitor_id == Competitor.id
-    ).where(Competitor.scraping_enabled == True)  # noqa: E712
+    ).where(
+        Competitor.scraping_enabled == True,  # noqa: E712
+        Competitor.tenant_id == tenant_id,
+    )
     comp_items_result = await db.execute(comp_items_stmt)
     comp_items = comp_items_result.all()
 
@@ -555,7 +582,10 @@ async def get_category_comparison(db: DB) -> CategoryComparisonResponse:
 # =============================================================================
 
 @router.get("/insights")
-async def get_ai_insights(db: DB) -> dict:
+async def get_ai_insights(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
     """
     Get AI-generated pricing insights based on category comparison data.
 
@@ -564,7 +594,7 @@ async def get_ai_insights(db: DB) -> dict:
     import os
 
     # Get comparison data first
-    comparison = await get_category_comparison(db)
+    comparison = await get_category_comparison(db, tenant_id)
 
     if not comparison.comparisons:
         return {

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { SessionProvider } from "next-auth/react";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Competitive Intelligence Dashboard",
+  title: "Forkast - Competitive Intelligence Dashboard",
   description: "Monitor competitor pricing across delivery platforms",
 };
 
@@ -29,17 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="flex min-h-screen">
-          {/* Sidebar - hidden on mobile */}
-          <Sidebar />
-
-          {/* Main content area */}
-          <main className="flex-1 md:ml-64 bg-gray-50 min-h-screen">
-            <div className="p-6 lg:p-8">
-              {children}
-            </div>
-          </main>
-        </div>
+        <SessionProvider>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

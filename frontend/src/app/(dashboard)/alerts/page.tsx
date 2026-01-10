@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import AlertsList from '@/components/AlertsList';
-import { SERVER_API_URL } from '@/lib/config';
+import { SERVER_API_URL, getServerApiHeaders } from '@/lib/server-config';
 
 interface Alert {
   id: string;
@@ -27,6 +27,7 @@ async function fetchAlerts(): Promise<AlertsResponse | null> {
   try {
     const res = await fetch(`${SERVER_API_URL}/api/v1/alerts`, {
       cache: 'no-store',
+      headers: await getServerApiHeaders(),
     });
 
     if (!res.ok) {

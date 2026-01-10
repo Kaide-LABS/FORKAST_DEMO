@@ -24,6 +24,9 @@ class Competitor(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
     )
+    tenant_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="default", index=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     concept_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -143,6 +146,9 @@ class OperatorProfile(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
     )
+    tenant_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="default", index=True
+    )
     restaurant_name: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     concept_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -245,6 +251,9 @@ class CategoryMapping(Base):
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=generate_uuid
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="default", index=True
     )
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "competitor" or "operator"
     source_id: Mapped[str] = mapped_column(String(36), nullable=False)  # competitor_id or operator_id

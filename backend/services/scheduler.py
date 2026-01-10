@@ -220,11 +220,11 @@ async def scrape_competitor(db: AsyncSession, competitor: Competitor) -> dict:
         ))
         if raw_categories:
             unmapped = await category_ai_service.get_unmapped_categories(
-                db, "competitor", competitor.id, raw_categories
+                db, "competitor", competitor.id, raw_categories, competitor.tenant_id
             )
             if unmapped:
                 mapped = await category_ai_service.auto_map_categories(
-                    db, "competitor", competitor.id, unmapped, threshold=0.5
+                    db, "competitor", competitor.id, unmapped, threshold=0.5, tenant_id=competitor.tenant_id
                 )
                 categories_mapped = len(mapped)
                 logger.info(f"Auto-mapped {categories_mapped} categories for {competitor.name}")

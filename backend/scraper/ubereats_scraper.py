@@ -95,6 +95,40 @@ class UberEatsScraper:
         except Exception:
             pass
 
+    async def _set_delivery_location(self, page, address: str = "3025 Peachtree Rd NE, Atlanta, GA 30305") -> None:
+        """
+        Set a delivery location in localStorage before loading the store page.
+        UberEats requires a delivery address to show menu items.
+        """
+        # First navigate to ubereats.com to set localStorage
+        await page.goto("https://www.ubereats.com", wait_until="domcontentloaded", timeout=30000)
+
+        # Set the location in localStorage (UberEats stores location data here)
+        # This simulates a user having already set their delivery address
+        await page.evaluate(f'''
+            localStorage.setItem('userLocation', JSON.stringify({{
+                "address": "{address}",
+                "latitude": 33.8469,
+                "longitude": -84.3627
+            }}));
+            localStorage.setItem('uev2.fulf.sch', JSON.stringify({{
+                "fult": "DELIVERY",
+                "loc": {{
+                    "address": {{
+                        "title": "{address}",
+                        "address1": "3025 Peachtree Rd NE",
+                        "city": "Atlanta",
+                        "state": "GA",
+                        "postalCode": "30305",
+                        "country": "US"
+                    }},
+                    "latitude": 33.8469,
+                    "longitude": -84.3627
+                }}
+            }}));
+        ''')
+        print(f"Set delivery location: {address}")
+
     async def scrape(self, url: str) -> ScrapeResult:
         """Scrape menu items from an Uber Eats restaurant page."""
         import time
@@ -114,6 +148,13 @@ class UberEatsScraper:
 
         async with browser.get_page() as page:
             try:
+                # Only set location via localStorage if URL doesn't have location params
+                # URLs with pl= or diningMode=DELIVERY already have location embedded
+                if "pl=" not in url and "diningMode=" not in url:
+                    await self._set_delivery_location(page)
+                else:
+                    print("URL has embedded location params, skipping localStorage setup")
+
                 print(f"Navigating to: {url}")
                 # Reduced timeout for Browserless free tier (60s session limit)
                 await page.goto(url, wait_until="domcontentloaded", timeout=45000)

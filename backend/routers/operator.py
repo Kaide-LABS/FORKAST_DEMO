@@ -11,13 +11,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
 from models import OperatorProfile, OperatorMenuItem, Competitor, MenuItem
+from tenant import get_tenant_id
 from schemas import (
     OperatorProfileCreate,
     OperatorProfileUpdate,
@@ -39,7 +40,10 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 # =============================================================================
 
 @router.get("/profile", response_model=Optional[OperatorProfileWithItems])
-async def get_operator_profile(db: DB) -> Optional[OperatorProfileWithItems]:
+async def get_operator_profile(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> Optional[OperatorProfileWithItems]:
     """
     Get the operator's profile with menu items.
 
@@ -47,7 +51,7 @@ async def get_operator_profile(db: DB) -> Optional[OperatorProfileWithItems]:
     """
     stmt = select(OperatorProfile).options(
         selectinload(OperatorProfile.menu_items)
-    ).limit(1)
+    ).where(OperatorProfile.tenant_id == tenant_id).limit(1)
 
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
@@ -62,14 +66,17 @@ async def get_operator_profile(db: DB) -> Optional[OperatorProfileWithItems]:
 async def create_operator_profile(
     profile_data: OperatorProfileCreate,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> OperatorProfileRead:
     """
     Create the operator's profile.
 
-    Only one profile can exist - returns error if one already exists.
+    Only one profile per tenant - returns error if one already exists.
     """
-    # Check if profile already exists
-    existing_stmt = select(OperatorProfile).limit(1)
+    # Check if profile already exists for this tenant
+    existing_stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     existing_result = await db.execute(existing_stmt)
     if existing_result.scalar_one_or_none():
         raise HTTPException(
@@ -77,7 +84,7 @@ async def create_operator_profile(
             detail="Operator profile already exists. Use PUT to update.",
         )
 
-    profile = OperatorProfile(**profile_data.model_dump())
+    profile = OperatorProfile(**profile_data.model_dump(), tenant_id=tenant_id)
     db.add(profile)
     await db.commit()
     await db.refresh(profile)
@@ -89,13 +96,16 @@ async def create_operator_profile(
 async def update_operator_profile(
     profile_data: OperatorProfileUpdate,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> OperatorProfileRead:
     """
     Update the operator's profile.
 
     Creates a new profile if one doesn't exist.
     """
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
@@ -107,7 +117,7 @@ async def update_operator_profile(
                 status_code=400,
                 detail="restaurant_name is required when creating a new profile",
             )
-        profile = OperatorProfile(**create_data)
+        profile = OperatorProfile(**create_data, tenant_id=tenant_id)
         db.add(profile)
     else:
         # Update existing profile
@@ -122,9 +132,14 @@ async def update_operator_profile(
 
 
 @router.delete("/profile")
-async def delete_operator_profile(db: DB) -> dict:
+async def delete_operator_profile(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
     """Delete the operator's profile and all associated menu items."""
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
@@ -144,6 +159,7 @@ async def delete_operator_profile(db: DB) -> dict:
 @router.post("/scrape")
 async def scrape_operator_menu(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     platform: str = Query(default="ubereats", pattern="^(ubereats|doordash)$"),
 ) -> dict:
     """
@@ -152,7 +168,9 @@ async def scrape_operator_menu(
     Runs in the background and updates the operator's menu items.
     Returns a job_id that can be used to check status.
     """
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
@@ -181,7 +199,7 @@ async def scrape_operator_menu(
     )
 
     # Run scraping in background using asyncio.create_task for immediate execution
-    asyncio.create_task(scrape_operator_menu_task(profile.id, url, platform, job.job_id))
+    asyncio.create_task(scrape_operator_menu_task(profile.id, url, platform, job.job_id, tenant_id))
 
     return {
         "status": "started",
@@ -210,7 +228,10 @@ async def get_scrape_status(job_id: str) -> dict:
 
 
 @router.get("/scrape/latest")
-async def get_latest_scrape_status(db: DB) -> dict:
+async def get_latest_scrape_status(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
     """
     Get the status of the latest scrape job for the operator.
 
@@ -218,7 +239,9 @@ async def get_latest_scrape_status(db: DB) -> dict:
     """
     from services.scrape_status import scrape_tracker
 
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
@@ -236,10 +259,13 @@ async def get_latest_scrape_status(db: DB) -> dict:
 @router.get("/menu", response_model=list[OperatorMenuItemRead])
 async def get_operator_menu(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     category: Optional[str] = None,
 ) -> list[OperatorMenuItemRead]:
     """Get the operator's menu items."""
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 
@@ -268,6 +294,7 @@ async def get_operator_menu(
 @router.get("/price-analysis", response_model=PriceAnalysisResponse)
 async def get_price_analysis(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     threshold: float = Query(default=10.0, description="Percentage threshold for underpriced/overpriced"),
 ) -> PriceAnalysisResponse:
     """
@@ -278,7 +305,7 @@ async def get_price_analysis(
     # Get operator profile and menu
     profile_stmt = select(OperatorProfile).options(
         selectinload(OperatorProfile.menu_items)
-    ).limit(1)
+    ).where(OperatorProfile.tenant_id == tenant_id).limit(1)
     profile_result = await db.execute(profile_stmt)
     profile = profile_result.scalar_one_or_none()
 
@@ -288,10 +315,13 @@ async def get_price_analysis(
             detail="No operator menu items found. Please add your restaurant and scrape your menu first.",
         )
 
-    # Get all competitor menu items
+    # Get all competitor menu items (filtered by tenant)
     competitor_items_stmt = select(MenuItem, Competitor.name.label("competitor_name")).join(
         Competitor, MenuItem.competitor_id == Competitor.id
-    ).where(Competitor.scraping_enabled == True)  # noqa: E712
+    ).where(
+        Competitor.scraping_enabled == True,  # noqa: E712
+        Competitor.tenant_id == tenant_id,
+    )
 
     competitor_result = await db.execute(competitor_items_stmt)
     competitor_items = competitor_result.all()
@@ -372,6 +402,7 @@ async def get_price_analysis(
 @router.get("/roi-analysis", response_model=ROIAnalysis)
 async def get_roi_analysis(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     monthly_orders: Optional[int] = Query(default=None),
     average_order_value: Optional[float] = Query(default=None),
     profit_margin: Optional[float] = Query(default=None),
@@ -385,7 +416,7 @@ async def get_roi_analysis(
     # Get operator profile
     profile_stmt = select(OperatorProfile).options(
         selectinload(OperatorProfile.menu_items)
-    ).limit(1)
+    ).where(OperatorProfile.tenant_id == tenant_id).limit(1)
     profile_result = await db.execute(profile_stmt)
     profile = profile_result.scalar_one_or_none()
 
@@ -402,7 +433,10 @@ async def get_roi_analysis(
             # Calculate from market average if no profile value
             market_avg_stmt = select(func.avg(MenuItem.current_price)).join(
                 Competitor, MenuItem.competitor_id == Competitor.id
-            ).where(Competitor.scraping_enabled == True)  # noqa: E712
+            ).where(
+                Competitor.scraping_enabled == True,  # noqa: E712
+                Competitor.tenant_id == tenant_id,
+            )
             market_result = await db.execute(market_avg_stmt)
             market_avg = market_result.scalar()
             aov = float(market_avg) if market_avg else 25.0
@@ -418,7 +452,7 @@ async def get_roi_analysis(
 
     if profile and profile.menu_items:
         try:
-            analysis = await get_price_analysis(db, threshold=10.0)
+            analysis = await get_price_analysis(db, tenant_id, threshold=10.0)
             underpriced_count = analysis.underpriced_items
             top_opportunities = [g for g in analysis.price_gaps if g.opportunity_type == "underpriced"][:5]
 
@@ -466,9 +500,14 @@ async def get_roi_analysis(
 
 
 @router.get("/categories")
-async def get_operator_categories(db: DB) -> list[str]:
+async def get_operator_categories(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> list[str]:
     """Get list of unique categories from operator's menu."""
-    stmt = select(OperatorProfile).limit(1)
+    stmt = select(OperatorProfile).where(
+        OperatorProfile.tenant_id == tenant_id
+    ).limit(1)
     result = await db.execute(stmt)
     profile = result.scalar_one_or_none()
 

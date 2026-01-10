@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import Competitor, MenuItem, PriceHistory
 from services.category_ai import category_ai_service
+from tenant import get_tenant_id
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
 
@@ -148,14 +149,20 @@ def generate_mock_items(concept_type: str | None) -> list[dict]:
 async def trigger_scrape(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
     Trigger a menu scrape for a competitor.
 
     Tries Uber Eats first (most reliable), then DoorDash.
     """
-    # Fetch competitor
-    competitor = await db.get(Competitor, competitor_id)
+    # Fetch competitor (filtered by tenant)
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -271,11 +278,11 @@ async def trigger_scrape(
         ))
         if raw_categories:
             unmapped = await category_ai_service.get_unmapped_categories(
-                db, "competitor", competitor_id, raw_categories
+                db, "competitor", competitor_id, raw_categories, tenant_id
             )
             if unmapped:
                 mapped = await category_ai_service.auto_map_categories(
-                    db, "competitor", competitor_id, unmapped, threshold=0.5
+                    db, "competitor", competitor_id, unmapped, threshold=0.35, tenant_id=tenant_id
                 )
                 categories_mapped = len(mapped)
                 print(f"Auto-mapped {categories_mapped} categories for competitor {competitor.name}")
@@ -297,9 +304,16 @@ async def trigger_scrape(
 async def get_scrape_status(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """Get scraping status and item count for a competitor."""
-    competitor = await db.get(Competitor, competitor_id)
+    # Fetch competitor (filtered by tenant)
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

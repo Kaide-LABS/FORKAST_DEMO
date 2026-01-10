@@ -4,7 +4,7 @@ import PriceHistoryChart from '@/components/PriceHistoryChart';
 import CategoryComparison from '@/components/CategoryComparison';
 import AIInsights from '@/components/AIInsights';
 import ROICalculator from '@/components/ROICalculator';
-import { SERVER_API_URL } from '@/lib/config';
+import { SERVER_API_URL, getServerApiHeaders } from '@/lib/server-config';
 
 interface CategoryBreakdownData {
   category: string;
@@ -45,6 +45,7 @@ async function fetchDashboardData(): Promise<DashboardComparison | null> {
   try {
     const res = await fetch(`${SERVER_API_URL}/api/v1/dashboard/comparison`, {
       cache: 'no-store',
+      headers: await getServerApiHeaders(),
     });
 
     if (!res.ok) {

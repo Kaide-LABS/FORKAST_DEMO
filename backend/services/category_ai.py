@@ -67,8 +67,10 @@ class CategoryAIService:
     """
 
     def __init__(self):
-        self.model_name = "models/text-embedding-004"
-        self.similarity_threshold = 0.75  # Minimum similarity for auto-mapping
+        # Using gemini-embedding-001 - the latest model that outperforms text-embedding-004
+        # text-embedding-004 deprecated Jan 14, 2026
+        self.model_name = "models/gemini-embedding-001"
+        self.similarity_threshold = 0.35  # Lower threshold for AI autonomy
         self._embedding_cache: dict[str, list[float]] = {}
 
     def _get_embedding_sync(self, text: str) -> list[float]:
@@ -298,7 +300,8 @@ class CategoryAIService:
         source_type: str,
         source_id: str,
         raw_categories: list[str],
-        threshold: float = 0.8
+        threshold: float = 0.8,
+        tenant_id: str = "default"
     ) -> list[CategoryMapping]:
         """
         Automatically create mappings for categories with high confidence.
@@ -311,11 +314,12 @@ class CategoryAIService:
 
         for suggestion in suggestions:
             if suggestion.confidence_score >= threshold:
-                # Check if mapping already exists
+                # Check if mapping already exists (within this tenant)
                 existing_stmt = select(CategoryMapping).where(
                     CategoryMapping.source_type == source_type,
                     CategoryMapping.source_id == source_id,
-                    CategoryMapping.raw_category == suggestion.raw_category
+                    CategoryMapping.raw_category == suggestion.raw_category,
+                    CategoryMapping.tenant_id == tenant_id,
                 )
                 existing_result = await db.execute(existing_stmt)
                 existing = existing_result.scalar_one_or_none()
@@ -329,6 +333,7 @@ class CategoryAIService:
                 else:
                     # Create new mapping
                     mapping = CategoryMapping(
+                        tenant_id=tenant_id,
                         source_type=source_type,
                         source_id=source_id,
                         raw_category=suggestion.raw_category,
@@ -349,13 +354,15 @@ class CategoryAIService:
         db: AsyncSession,
         source_type: str,
         source_id: str,
-        raw_categories: list[str]
+        raw_categories: list[str],
+        tenant_id: str = "default"
     ) -> list[str]:
         """Get list of raw categories that don't have mappings yet."""
         existing_stmt = select(CategoryMapping.raw_category).where(
             CategoryMapping.source_type == source_type,
             CategoryMapping.source_id == source_id,
-            CategoryMapping.raw_category.in_(raw_categories)
+            CategoryMapping.raw_category.in_(raw_categories),
+            CategoryMapping.tenant_id == tenant_id,
         )
         result = await db.execute(existing_stmt)
         mapped = {r[0] for r in result.all()}

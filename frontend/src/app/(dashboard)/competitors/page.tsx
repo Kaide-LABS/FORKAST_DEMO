@@ -3,7 +3,7 @@
 import CompetitorsHeader from '@/components/CompetitorsHeader';
 import AddCompetitorButton from '@/components/AddCompetitorButton';
 import CompetitorCard from '@/components/CompetitorCard';
-import { SERVER_API_URL } from '@/lib/config';
+import { SERVER_API_URL, getServerApiHeaders } from '@/lib/server-config';
 
 interface Competitor {
   id: string;
@@ -24,6 +24,7 @@ async function fetchCompetitors(): Promise<Competitor[] | null> {
     // Use the endpoint that includes item counts
     const res = await fetch(`${SERVER_API_URL}/api/v1/competitors/with-stats/all`, {
       cache: 'no-store',
+      headers: await getServerApiHeaders(),
     });
 
     if (!res.ok) {

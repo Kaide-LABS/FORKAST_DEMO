@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db
 from models import Competitor, MenuItem
+from tenant import get_tenant_id
 from schemas import (
     CompetitorCreate,
     CompetitorRead,
@@ -30,6 +31,7 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/", response_model=list[CompetitorRead])
 async def list_competitors(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     skip: int = 0,
     limit: int = 100,
     active_only: bool = False,
@@ -42,7 +44,7 @@ async def list_competitors(
         limit: Maximum number of records to return
         active_only: If True, only return competitors with scraping_enabled=True
     """
-    stmt = select(Competitor)
+    stmt = select(Competitor).where(Competitor.tenant_id == tenant_id)
 
     if active_only:
         stmt = stmt.where(Competitor.scraping_enabled == True)  # noqa: E712
@@ -56,6 +58,7 @@ async def list_competitors(
 @router.get("/with-stats/all")
 async def list_competitors_with_stats(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     skip: int = 0,
     limit: int = 100,
 ) -> list[dict]:
@@ -63,7 +66,9 @@ async def list_competitors_with_stats(
     List all competitors with their item counts.
     """
     # Get competitors
-    stmt = select(Competitor).offset(skip).limit(limit).order_by(Competitor.name)
+    stmt = select(Competitor).where(
+        Competitor.tenant_id == tenant_id
+    ).offset(skip).limit(limit).order_by(Competitor.name)
     result = await db.execute(stmt)
     competitors = list(result.scalars().all())
 
@@ -98,11 +103,17 @@ async def list_competitors_with_stats(
 async def get_competitor(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> Competitor:
     """
     Get a single competitor by ID.
     """
-    competitor = await db.get(Competitor, competitor_id)
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -115,6 +126,7 @@ async def get_competitor(
 async def create_competitor(
     competitor_data: CompetitorCreate,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> Competitor:
     """
     Create a new competitor to track.
@@ -122,9 +134,10 @@ async def create_competitor(
     # Trim whitespace from name
     clean_name = competitor_data.name.strip()
 
-    # Check for duplicate by name (case-insensitive, trimmed)
+    # Check for duplicate by name within this tenant (case-insensitive, trimmed)
     stmt = select(Competitor).where(
-        func.lower(func.trim(Competitor.name)) == func.lower(clean_name)
+        func.lower(func.trim(Competitor.name)) == func.lower(clean_name),
+        Competitor.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     existing = result.scalar_one_or_none()
@@ -138,6 +151,7 @@ async def create_competitor(
     # Use the cleaned name
     competitor_data_dict = competitor_data.model_dump()
     competitor_data_dict['name'] = clean_name
+    competitor_data_dict['tenant_id'] = tenant_id
 
     competitor = Competitor(**competitor_data_dict)
     db.add(competitor)
@@ -151,11 +165,17 @@ async def update_competitor(
     competitor_id: str,
     competitor_data: CompetitorUpdate,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> Competitor:
     """
     Update an existing competitor.
     """
-    competitor = await db.get(Competitor, competitor_id)
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -176,11 +196,17 @@ async def update_competitor(
 async def delete_competitor(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> None:
     """
     Delete a competitor (and all associated menu items).
     """
-    competitor = await db.get(Competitor, competitor_id)
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -195,6 +221,7 @@ async def delete_competitor(
 async def get_competitor_menu(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> list[MenuItem]:
     """
     Get all menu items for a competitor.
@@ -202,8 +229,13 @@ async def get_competitor_menu(
     Args:
         competitor_id: UUID of the competitor
     """
-    # Verify competitor exists
-    competitor = await db.get(Competitor, competitor_id)
+    # Verify competitor exists and belongs to tenant
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -221,12 +253,18 @@ async def get_competitor_menu(
 async def get_competitor_stats(
     competitor_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     """
     Get statistics for a competitor (item count, avg price, etc.).
     """
-    # Verify competitor exists
-    competitor = await db.get(Competitor, competitor_id)
+    # Verify competitor exists and belongs to tenant
+    stmt = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    competitor = result.scalar_one_or_none()
     if not competitor:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

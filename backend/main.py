@@ -5,10 +5,32 @@ load_dotenv()  # Load environment variables from .env file
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 
-from database import init_db
+from database import init_db, async_session
+from models import CanonicalCategory
 from routers import competitors_router, dashboard_router, alerts_router, scraping_router, operator_router, categories_router
+from routers.categories import SEED_CATEGORIES
 from services.scheduler import start_scheduler, stop_scheduler
+
+
+async def auto_seed_categories():
+    """Automatically seed canonical categories if none exist."""
+    async with async_session() as db:
+        result = await db.execute(select(CanonicalCategory).limit(1))
+        if result.scalar_one_or_none() is None:
+            print("No canonical categories found - auto-seeding...")
+            for name, description, keywords in SEED_CATEGORIES:
+                category = CanonicalCategory(
+                    name=name,
+                    description=description,
+                    keywords=keywords
+                )
+                db.add(category)
+            await db.commit()
+            print(f"Auto-seeded {len(SEED_CATEGORIES)} canonical categories")
+        else:
+            print("Canonical categories already exist - skipping seed")
 
 
 @asynccontextmanager
@@ -16,6 +38,8 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
     # Startup: Initialize database
     await init_db()
+    # Auto-seed canonical categories (prevents empty DB after redeploy)
+    await auto_seed_categories()
     # Start the scheduled scraping service
     await start_scheduler()
     yield

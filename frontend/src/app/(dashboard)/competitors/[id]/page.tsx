@@ -6,7 +6,7 @@ import RefreshDataButton from '@/components/RefreshDataButton';
 import PriceHistoryChart from '@/components/PriceHistoryChart';
 import MenuItemsTable from '@/components/MenuItemsTable';
 import CompetitorCategoryMapping from '@/components/CompetitorCategoryMapping';
-import { SERVER_API_URL } from '@/lib/config';
+import { SERVER_API_URL, getServerApiHeaders } from '@/lib/server-config';
 
 interface Competitor {
   id: string;
@@ -58,6 +58,7 @@ async function fetchCompetitor(id: string): Promise<Competitor | null> {
   try {
     const res = await fetch(`${SERVER_API_URL}/api/v1/competitors/${id}`, {
       cache: 'no-store',
+      headers: await getServerApiHeaders(),
     });
 
     if (res.status === 404) {
@@ -79,6 +80,7 @@ async function fetchMenuItems(id: string): Promise<MenuItem[]> {
   try {
     const res = await fetch(`${SERVER_API_URL}/api/v1/competitors/${id}/menu`, {
       cache: 'no-store',
+      headers: await getServerApiHeaders(),
     });
 
     if (!res.ok) {

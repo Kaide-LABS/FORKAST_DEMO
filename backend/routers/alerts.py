@@ -21,6 +21,7 @@ from schemas import (
     AlertAcknowledge,
     AlertsResponse,
 )
+from tenant import get_tenant_id
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -30,6 +31,7 @@ DB = Annotated[AsyncSession, Depends(get_db)]
 @router.get("/", response_model=AlertsResponse)
 async def list_alerts(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     unacknowledged_only: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -42,11 +44,12 @@ async def list_alerts(
         limit: Maximum number of alerts to return
         offset: Number of alerts to skip (for pagination)
     """
-    # Build base query with joins for item and competitor info
+    # Build base query with joins for item and competitor info (filtered by tenant)
     stmt = (
         select(Alert, MenuItem.name.label("item_name"), Competitor.name.label("competitor_name"))
         .join(MenuItem, Alert.menu_item_id == MenuItem.id)
         .join(Competitor, MenuItem.competitor_id == Competitor.id)
+        .where(Competitor.tenant_id == tenant_id)
     )
 
     if unacknowledged_only:
@@ -74,14 +77,23 @@ async def list_alerts(
         for alert, item_name, competitor_name in alerts_data
     ]
 
-    # Get counts
-    unack_count_stmt = select(func.count(Alert.id)).where(
-        Alert.is_acknowledged == False  # noqa: E712
+    # Get counts (filtered by tenant)
+    unack_count_stmt = select(func.count(Alert.id)).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Alert.is_acknowledged == False,  # noqa: E712
+        Competitor.tenant_id == tenant_id,
     )
     unack_result = await db.execute(unack_count_stmt)
     unacknowledged_count = unack_result.scalar() or 0
 
-    total_count_stmt = select(func.count(Alert.id))
+    total_count_stmt = select(func.count(Alert.id)).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(Competitor.tenant_id == tenant_id)
     total_result = await db.execute(total_count_stmt)
     total_count = total_result.scalar() or 0
 
@@ -95,6 +107,7 @@ async def list_alerts(
 @router.get("/recent")
 async def get_recent_alerts(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     days: int = 7,
 ) -> list[AlertWithItem]:
     """
@@ -105,12 +118,15 @@ async def get_recent_alerts(
     """
     cutoff_date = datetime.utcnow() - timedelta(days=days)
 
-    # Get alerts from Alert table
+    # Get alerts from Alert table (filtered by tenant)
     alerts_stmt = (
         select(Alert, MenuItem.name.label("item_name"), Competitor.name.label("competitor_name"))
         .join(MenuItem, Alert.menu_item_id == MenuItem.id)
         .join(Competitor, MenuItem.competitor_id == Competitor.id)
-        .where(Alert.created_at >= cutoff_date)
+        .where(
+            Alert.created_at >= cutoff_date,
+            Competitor.tenant_id == tenant_id,
+        )
         .order_by(Alert.created_at.desc())
         .limit(100)
     )
@@ -138,35 +154,56 @@ async def get_recent_alerts(
 
 
 @router.get("/stats")
-async def get_alert_stats(db: DB) -> dict:
+async def get_alert_stats(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
     """
     Get alert statistics.
     """
-    # Count by type
+    # Count by type (filtered by tenant)
     type_counts_stmt = select(
         Alert.alert_type,
         func.count(Alert.id).label("count"),
-    ).group_by(Alert.alert_type)
+    ).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(Competitor.tenant_id == tenant_id).group_by(Alert.alert_type)
 
     type_result = await db.execute(type_counts_stmt)
     type_counts = {row.alert_type: row.count for row in type_result.all()}
 
-    # Count unacknowledged
-    unack_stmt = select(func.count(Alert.id)).where(
-        Alert.is_acknowledged == False  # noqa: E712
+    # Count unacknowledged (filtered by tenant)
+    unack_stmt = select(func.count(Alert.id)).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Alert.is_acknowledged == False,  # noqa: E712
+        Competitor.tenant_id == tenant_id,
     )
     unack_result = await db.execute(unack_stmt)
     unacknowledged = unack_result.scalar() or 0
 
-    # Count total
-    total_stmt = select(func.count(Alert.id))
+    # Count total (filtered by tenant)
+    total_stmt = select(func.count(Alert.id)).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(Competitor.tenant_id == tenant_id)
     total_result = await db.execute(total_stmt)
     total = total_result.scalar() or 0
 
-    # Recent alerts (last 7 days)
+    # Recent alerts (last 7 days, filtered by tenant)
     recent_cutoff = datetime.utcnow() - timedelta(days=7)
-    recent_stmt = select(func.count(Alert.id)).where(
-        Alert.created_at >= recent_cutoff
+    recent_stmt = select(func.count(Alert.id)).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Alert.created_at >= recent_cutoff,
+        Competitor.tenant_id == tenant_id,
     )
     recent_result = await db.execute(recent_stmt)
     recent = recent_result.scalar() or 0
@@ -183,6 +220,7 @@ async def get_alert_stats(db: DB) -> dict:
 async def get_alert(
     alert_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> AlertWithItem:
     """
     Get a single alert by ID.
@@ -191,7 +229,10 @@ async def get_alert(
         select(Alert, MenuItem.name.label("item_name"), Competitor.name.label("competitor_name"))
         .join(MenuItem, Alert.menu_item_id == MenuItem.id)
         .join(Competitor, MenuItem.competitor_id == Competitor.id)
-        .where(Alert.id == alert_id)
+        .where(
+            Alert.id == alert_id,
+            Competitor.tenant_id == tenant_id,
+        )
     )
 
     result = await db.execute(stmt)
@@ -223,11 +264,22 @@ async def get_alert(
 async def acknowledge_alert(
     alert_id: str,
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
 ) -> Alert:
     """
     Mark an alert as acknowledged.
     """
-    alert = await db.get(Alert, alert_id)
+    # Verify alert belongs to tenant
+    stmt = select(Alert).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Alert.id == alert_id,
+        Competitor.tenant_id == tenant_id,
+    )
+    result = await db.execute(stmt)
+    alert = result.scalar_one_or_none()
     if not alert:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -242,12 +294,22 @@ async def acknowledge_alert(
 
 
 @router.post("/acknowledge-all")
-async def acknowledge_all_alerts(db: DB) -> dict:
+async def acknowledge_all_alerts(
+    db: DB,
+    tenant_id: str = Depends(get_tenant_id),
+) -> dict:
     """
     Mark all unacknowledged alerts as acknowledged.
     """
-    # Get all unacknowledged alerts
-    stmt = select(Alert).where(Alert.is_acknowledged == False)  # noqa: E712
+    # Get all unacknowledged alerts (filtered by tenant)
+    stmt = select(Alert).join(
+        MenuItem, Alert.menu_item_id == MenuItem.id
+    ).join(
+        Competitor, MenuItem.competitor_id == Competitor.id
+    ).where(
+        Alert.is_acknowledged == False,  # noqa: E712
+        Competitor.tenant_id == tenant_id,
+    )
     result = await db.execute(stmt)
     alerts = result.scalars().all()
 
@@ -264,6 +326,7 @@ async def acknowledge_all_alerts(db: DB) -> dict:
 @router.get("/price-changes/significant")
 async def get_significant_price_changes(
     db: DB,
+    tenant_id: str = Depends(get_tenant_id),
     days: int = 7,
     threshold: float = 5.0,
 ) -> list[dict]:
@@ -293,6 +356,7 @@ async def get_significant_price_changes(
                 PriceHistory.recorded_at >= cutoff_date,
                 PriceHistory.change_percentage.isnot(None),
                 func.abs(PriceHistory.change_percentage) >= threshold_decimal,
+                Competitor.tenant_id == tenant_id,
             )
         )
         .order_by(PriceHistory.recorded_at.desc())

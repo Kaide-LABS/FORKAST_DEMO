@@ -15,6 +15,7 @@ export const CLIENT_API_URL = '/api/proxy';
 export const API_BASE_URL = CLIENT_API_URL;
 
 // API endpoints (for client components)
+// Note: Tenant ID is automatically added by the API proxy using Clerk session
 export const API_ENDPOINTS = {
   competitors: `${CLIENT_API_URL}/api/v1/competitors`,
   dashboard: `${CLIENT_API_URL}/api/v1/dashboard`,
