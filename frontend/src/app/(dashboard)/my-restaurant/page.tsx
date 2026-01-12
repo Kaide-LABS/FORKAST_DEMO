@@ -171,18 +171,36 @@ export default function MyRestaurantPage() {
     setError(null);
     setSuccessMessage(null);
 
+    // Validate restaurant name
+    if (!formData.restaurant_name.trim()) {
+      setError('Restaurant name is required');
+      setSaving(false);
+      return;
+    }
+
     try {
       const method = profile ? 'PUT' : 'POST';
-      const payload = {
-        restaurant_name: formData.restaurant_name,
-        location: formData.location || null,
-        concept_type: formData.concept_type || null,
-        ubereats_url: formData.ubereats_url || null,
-        doordash_url: formData.doordash_url || null,
-        monthly_orders: formData.monthly_orders ? parseInt(formData.monthly_orders) : null,
-        average_order_value: formData.average_order_value ? parseFloat(formData.average_order_value) : null,
-        profit_margin: formData.profit_margin ? parseFloat(formData.profit_margin) : null,
+      // Build payload, excluding empty optional fields for PUT requests
+      const payload: Record<string, string | number | null> = {
+        restaurant_name: formData.restaurant_name.trim(),
       };
+
+      // Only include optional fields if they have values
+      if (formData.location?.trim()) payload.location = formData.location.trim();
+      else payload.location = null;
+
+      if (formData.concept_type?.trim()) payload.concept_type = formData.concept_type.trim();
+      else payload.concept_type = null;
+
+      if (formData.ubereats_url?.trim()) payload.ubereats_url = formData.ubereats_url.trim();
+      else payload.ubereats_url = null;
+
+      if (formData.doordash_url?.trim()) payload.doordash_url = formData.doordash_url.trim();
+      else payload.doordash_url = null;
+
+      payload.monthly_orders = formData.monthly_orders ? parseInt(formData.monthly_orders) : null;
+      payload.average_order_value = formData.average_order_value ? parseFloat(formData.average_order_value) : null;
+      payload.profit_margin = formData.profit_margin ? parseFloat(formData.profit_margin) : null;
 
       const res = await fetch(`${API_ENDPOINTS.operator}/profile`, {
         method,

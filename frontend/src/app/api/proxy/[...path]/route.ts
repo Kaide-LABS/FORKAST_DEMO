@@ -7,12 +7,20 @@ const BACKEND_URL = process.env.NODE_ENV === 'development'
   ? 'http://127.0.0.1:8000'
   : 'https://forkast-api-84498540486.us-central1.run.app';
 
-// Endpoints that require trailing slash for POST/PUT to avoid 307 redirects
+// Endpoints that require trailing slash to avoid 307 redirects
 // Only exact matches - NOT paths with IDs after them
 const TRAILING_SLASH_ENDPOINTS = [
   'api/v1/competitors',
   'api/v1/alerts',
 ];
+
+// Helper function to add trailing slash if needed
+function addTrailingSlashIfNeeded(pathStr: string): string {
+  if (TRAILING_SLASH_ENDPOINTS.includes(pathStr) && !pathStr.endsWith('/')) {
+    return pathStr + '/';
+  }
+  return pathStr;
+}
 
 // Helper to get headers with tenant ID from NextAuth session
 async function getProxyHeaders(): Promise<Record<string, string>> {
@@ -30,7 +38,7 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  const pathStr = path.join('/');
+  const pathStr = addTrailingSlashIfNeeded(path.join('/'));
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${BACKEND_URL}/${pathStr}${searchParams ? `?${searchParams}` : ''}`;
 
@@ -56,14 +64,7 @@ export async function POST(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  let pathStr = path.join('/');
-
-  // Add trailing slash ONLY for exact endpoint matches (e.g., api/v1/competitors)
-  // NOT for paths with IDs (e.g., api/v1/scraping/trigger/123)
-  const needsTrailingSlash = TRAILING_SLASH_ENDPOINTS.includes(pathStr);
-  if (needsTrailingSlash && !pathStr.endsWith('/')) {
-    pathStr += '/';
-  }
+  const pathStr = addTrailingSlashIfNeeded(path.join('/'));
 
   // Include query parameters for POST requests
   const searchParams = request.nextUrl.searchParams.toString();
@@ -94,13 +95,7 @@ export async function PUT(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
-  let pathStr = path.join('/');
-
-  // Add trailing slash ONLY for exact endpoint matches
-  const needsTrailingSlash = TRAILING_SLASH_ENDPOINTS.includes(pathStr);
-  if (needsTrailingSlash && !pathStr.endsWith('/')) {
-    pathStr += '/';
-  }
+  const pathStr = addTrailingSlashIfNeeded(path.join('/'));
 
   // Include query parameters for PUT requests
   const searchParams = request.nextUrl.searchParams.toString();
