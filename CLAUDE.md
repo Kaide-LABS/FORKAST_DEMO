@@ -26,49 +26,28 @@ Forkast is a food delivery aggregation demo with:
 - Backend: `gcloud run deploy` from `/backend` directory
 
 ## Session Handoff Notes
-Last updated: 2026-01-10
-Status: Clerk authentication integrated, awaiting API keys
+Last updated: 2026-01-12
+Status: Sign out fix for Netlify deployed
 
 ### Completed This Session:
-1. **Implemented multi-tenancy** - Added `tenant_id` to all backend models and routers
-2. **Integrated Clerk authentication** for the frontend:
-   - Installed `@clerk/nextjs` package
-   - Created `/sign-in` and `/sign-up` pages with Clerk components
-   - Added `ClerkProvider` to root layout
-   - Created middleware to protect authenticated routes
-   - Added `UserButton` to Sidebar for user management
-3. **Updated API proxy** to use Clerk user ID as tenant ID automatically
-4. **Created server-config.ts** with `getServerApiHeaders()` for server-side auth
-5. **Restructured app** using Next.js route groups: `(auth)` and `(dashboard)`
+1. **Fixed sign out functionality (initial)** - NextAuth v5 issue where `signOut({ callbackUrl })` doesn't properly clear client session state. Fixed by using `redirect: false` + manual `router.push()` + `router.refresh()`.
+2. **Fixed sign out on Netlify (production)** - Netlify has a bug where Set-Cookie headers are returned in reversed order, preventing session clearing. Added manual cookie expiration before signOut call.
+3. **Updated global CLAUDE.md** - Added repo indexing step to session handoff protocol.
+4. **Deployed to Netlify** - Live at https://forkast-dashboard.netlify.app
+5. **Pushed to GitHub** - commits 0c418a5, a34dc93
 
-### Files Modified/Created:
-- `src/middleware.ts` - NEW: Clerk route protection
-- `src/app/layout.tsx` - Minimal root with ClerkProvider
-- `src/app/(auth)/layout.tsx` - NEW: Auth pages layout (no sidebar)
-- `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx` - NEW
-- `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx` - NEW
-- `src/app/(dashboard)/layout.tsx` - NEW: Dashboard with Sidebar
-- `src/components/Sidebar.tsx` - Added UserButton
-- `src/app/api/proxy/[...path]/route.ts` - Uses Clerk auth for tenant
-- `src/lib/server-config.ts` - NEW: Server-side auth helpers
-- `.env.example` - Added Clerk env vars
+### Key Files:
+- `src/components/Sidebar.tsx` - Sign out button with Netlify-compatible handler (lines 19-27)
+
+### Known Issue (Netlify):
+Netlify returns Set-Cookie headers in reversed order (violates RFC 6265). Workaround: manually clear `authjs.session-token` and `__Secure-authjs.session-token` cookies before calling signOut.
 
 ### Current State:
-- Code is complete but **requires Clerk API keys to function**
-- Build will fail until user creates Clerk account and adds keys
+- **Frontend**: https://forkast-dashboard.netlify.app (with auth)
+- **Backend**: https://forkast-api-84498540486.us-central1.run.app
+- Sign in and sign out both working correctly in production
 
-### Next Steps (User Action Required):
-1. Create Clerk account at https://clerk.com
-2. Get API keys from Clerk dashboard
-3. Create `.env.local` with:
-   ```
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-   CLERK_SECRET_KEY=sk_test_...
-   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/
-   ```
-4. Add same env vars to Netlify for production
-5. Test authentication flow locally
-6. Deploy to Netlify
+### Next Steps:
+- Add more competitors for richer data
+- Consider Cloud SQL for persistent database
+- Optional: Add Google/GitHub OAuth providers to NextAuth

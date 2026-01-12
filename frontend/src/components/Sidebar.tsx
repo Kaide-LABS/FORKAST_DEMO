@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 
 const navigation = [
@@ -13,17 +13,11 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { data: session } = useSession();
 
-  const handleSignOut = async () => {
-    // Manually clear session cookies (Netlify bug: Set-Cookie headers reversed)
-    document.cookie = 'authjs.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    document.cookie = '__Secure-authjs.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Secure;';
-
-    await signOut({ redirect: false });
-    router.push('/sign-in');
-    router.refresh();
+  const handleSignOut = () => {
+    // Use NextAuth signOut with redirect - middleware fixes Netlify cookie bug
+    signOut({ callbackUrl: '/sign-in' });
   };
 
   return (
