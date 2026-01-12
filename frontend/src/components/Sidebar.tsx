@@ -17,6 +17,10 @@ export default function Sidebar() {
   const { data: session } = useSession();
 
   const handleSignOut = async () => {
+    // Manually clear session cookies (Netlify bug: Set-Cookie headers reversed)
+    document.cookie = 'authjs.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = '__Secure-authjs.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Secure;';
+
     await signOut({ redirect: false });
     router.push('/sign-in');
     router.refresh();
