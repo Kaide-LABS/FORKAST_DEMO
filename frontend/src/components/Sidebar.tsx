@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 
 const navigation = [
@@ -13,7 +13,14 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push('/sign-in');
+    router.refresh();
+  };
 
   return (
     <aside className="hidden md:flex md:w-52 md:flex-col md:fixed md:inset-y-0 bg-slate-900">
@@ -58,7 +65,7 @@ export default function Sidebar() {
                 </span>
               </div>
               <button
-                onClick={() => signOut({ callbackUrl: '/sign-in' })}
+                onClick={handleSignOut}
                 className="w-full text-sm text-slate-400 hover:text-white hover:bg-slate-800 py-2 px-3 rounded-lg transition-colors text-left"
               >
                 Sign out
